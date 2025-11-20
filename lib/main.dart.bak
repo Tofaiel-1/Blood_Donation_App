@@ -1,0 +1,4 @@
+// Backup of main.dart prior to temporary restore
+// Original file contained Firebase initialization which may fail when
+// `firebase_options.dart` is not generated. This file can be restored
+// from this backup if needed.

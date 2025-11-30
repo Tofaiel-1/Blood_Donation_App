@@ -62,7 +62,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             width: 80,
                             height: 80,
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.2),
+                              color: Colors.white.withValues(alpha: 0.2),
                               shape: BoxShape.circle,
                             ),
                             child: const Icon(
@@ -85,7 +85,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             'Log in to continue saving lives',
                             style: Theme.of(context).textTheme.bodyLarge
                                 ?.copyWith(
-                                  color: Colors.white.withOpacity(0.9),
+                                  color: Colors.white.withValues(alpha: 0.9),
                                 ),
                           ),
                         ],
@@ -125,7 +125,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 filled: true,
                                 fillColor: Theme.of(
                                   context,
-                                ).colorScheme.primary.withOpacity(0.05),
+                                ).colorScheme.primary.withValues(alpha: 0.05),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
                                   borderSide: BorderSide.none,
@@ -133,9 +133,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                 enabledBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
                                   borderSide: BorderSide(
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.outline.withOpacity(0.2),
+                                    color: Theme.of(context).colorScheme.outline
+                                        .withValues(alpha: 0.2),
                                   ),
                                 ),
                                 focusedBorder: OutlineInputBorder(
@@ -190,7 +189,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 filled: true,
                                 fillColor: Theme.of(
                                   context,
-                                ).colorScheme.primary.withOpacity(0.05),
+                                ).colorScheme.primary.withValues(alpha: 0.05),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
                                   borderSide: BorderSide.none,
@@ -198,9 +197,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                 enabledBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
                                   borderSide: BorderSide(
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.outline.withOpacity(0.2),
+                                    color: Theme.of(context).colorScheme.outline
+                                        .withValues(alpha: 0.2),
                                   ),
                                 ),
                                 focusedBorder: OutlineInputBorder(
@@ -248,7 +246,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         borderRadius: BorderRadius.circular(30),
                         boxShadow: [
                           BoxShadow(
-                            color: AppColors.bloodRed.withOpacity(0.4),
+                            color: AppColors.bloodRed.withValues(alpha: 0.4),
                             blurRadius: 12,
                             offset: const Offset(0, 6),
                           ),
@@ -389,6 +387,10 @@ class _LoginScreenState extends State<LoginScreen> {
         final profile = await authService.getCurrentUserProfile();
         final data = profile?.data();
 
+        // Check verification status
+        final emailVerified = credential.user?.emailVerified ?? false;
+        final phoneVerified = data?['phoneVerified'] ?? false;
+
         // Create user object
         User user = User(
           email: credential.user?.email ?? email,
@@ -399,6 +401,96 @@ class _LoginScreenState extends State<LoginScreen> {
         );
 
         if (!mounted) return;
+
+        // Skip verification for admin roles (superAdmin, orgAdmin)
+        final isAdmin =
+            user.role == UserRole.superAdmin || user.role == UserRole.orgAdmin;
+
+        // Show verification warning if not verified (only for regular users)
+        if (!isAdmin && (!emailVerified || !phoneVerified)) {
+          final shouldContinue = await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              title: const Row(
+                children: [
+                  Icon(Icons.warning_amber, color: Colors.orange, size: 28),
+                  SizedBox(width: 12),
+                  Text('Verification Required'),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'আপনার অ্যাকাউন্ট সম্পূর্ণভাবে ভেরিফাই হয়নি:',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 12),
+                  if (!emailVerified)
+                    const Row(
+                      children: [
+                        Icon(Icons.close, color: Colors.red, size: 20),
+                        SizedBox(width: 8),
+                        Text('Email ভেরিফাই হয়নি'),
+                      ],
+                    ),
+                  if (!phoneVerified)
+                    const Row(
+                      children: [
+                        Icon(Icons.close, color: Colors.red, size: 20),
+                        SizedBox(width: 8),
+                        Text('Phone ভেরিফাই হয়নি'),
+                      ],
+                    ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'ভেরিফিকেশন না করলে কিছু ফিচার সীমিত থাকবে।',
+                    style: TextStyle(fontSize: 13),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('পরে করবো'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.bloodRed,
+                  ),
+                  child: const Text('এখন ভেরিফাই করুন'),
+                ),
+              ],
+            ),
+          );
+
+          if (!mounted) return;
+
+          if (shouldContinue == false) {
+            // Navigate to verification screen
+            Navigator.pushReplacementNamed(
+              context,
+              '/verification',
+              arguments: {
+                'email': email,
+                'phone': data?['phone'],
+                'userData': {
+                  'email': user.email,
+                  'name': user.name,
+                  'bloodType': user.bloodType,
+                  'phone': user.phone,
+                  'role': user.role.toString().split('.').last,
+                },
+              },
+            );
+            return;
+          }
+        }
 
         // Route based on role
         if (user.role == UserRole.superAdmin) {
@@ -423,19 +515,21 @@ class _LoginScreenState extends State<LoginScreen> {
           _isLoading = false;
         });
 
-        String errorMessage = 'Invalid email or password';
+        String errorMessage = 'ইমেইল অথবা পাসওয়ার্ড ভুল';
         if (e.code == 'user-not-found') {
-          errorMessage = 'No account found with this email';
+          errorMessage = 'এই ইমেইলে কোনো অ্যাকাউন্ট পাওয়া যায়নি';
         } else if (e.code == 'wrong-password') {
-          errorMessage = 'Incorrect password';
+          errorMessage = 'পাসওয়ার্ড ভুল হয়েছে';
         } else if (e.code == 'invalid-email') {
-          errorMessage = 'Invalid email address';
+          errorMessage = 'ইমেইল ঠিকানা সঠিক নয়';
         } else if (e.code == 'user-disabled') {
-          errorMessage = 'This account has been disabled';
+          errorMessage = 'এই অ্যাকাউন্ট নিষ্ক্রিয় করা হয়েছে';
         } else if (e.code == 'too-many-requests') {
-          errorMessage = 'Too many attempts. Please try again later';
+          errorMessage = 'অনেকবার চেষ্টা করেছেন। কিছুক্ষণ পর আবার চেষ্টা করুন';
         } else if (e.code == 'network-request-failed') {
-          errorMessage = 'Network error. Check your connection';
+          errorMessage = 'নেটওয়ার্ক সমস্যা। ইন্টারনেট চেক করুন';
+        } else if (e.code == 'invalid-credential') {
+          errorMessage = 'ইমেইল অথবা পাসওয়ার্ড ভুল';
         }
 
         ScaffoldMessenger.of(context).showSnackBar(
@@ -482,13 +576,12 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   UserRole _getUserRole(String? role) {
-    switch (role) {
-      case 'superAdmin':
-        return UserRole.superAdmin;
-      case 'orgAdmin':
-        return UserRole.orgAdmin;
-      default:
-        return UserRole.user;
+    final roleStr = role?.toLowerCase() ?? '';
+    if (roleStr == 'superadmin' || roleStr == 'admin') {
+      return UserRole.superAdmin;
+    } else if (roleStr == 'orgadmin') {
+      return UserRole.orgAdmin;
     }
+    return UserRole.user;
   }
 }

@@ -211,7 +211,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         height: 90,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: Colors.white.withOpacity(0.3),
+                          color: Colors.white.withValues(alpha: 0.3),
                           border: Border.all(color: Colors.white, width: 3),
                         ),
                         child: Center(
@@ -240,7 +240,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       Text(
                         currentUser!.email,
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Colors.white.withOpacity(0.9),
+                          color: Colors.white.withValues(alpha: 0.9),
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -279,27 +279,68 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             child: CircularProgressIndicator(),
                           ),
                         )
-                      : Row(
+                      : Column(
                           children: [
-                            Expanded(
-                              child: StatCard(
-                                value: donationHistory.length.toString(),
-                                label: 'Donations',
-                                icon: Icons.bloodtype,
-                              ),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: StatCard(
+                                    value: donationHistory
+                                        .where((d) => d.status == 'completed')
+                                        .length
+                                        .toString(),
+                                    label: 'Completed Donations',
+                                    icon: Icons.bloodtype,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: StatCard(
+                                    value:
+                                        (donationHistory
+                                                    .where(
+                                                      (d) =>
+                                                          d.status ==
+                                                          'completed',
+                                                    )
+                                                    .length *
+                                                3)
+                                            .toString(),
+                                    label: 'Lives Saved',
+                                    icon: Icons.favorite,
+                                    color: Colors.green,
+                                  ),
+                                ),
+                              ],
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: StatCard(
-                                value: daysUntilNextDonation.toString(),
-                                label: daysUntilNextDonation == 0
-                                    ? 'Can Donate'
-                                    : 'Days Left',
-                                icon: Icons.access_time,
-                                color: daysUntilNextDonation == 0
-                                    ? AppColors.hopeGreen
-                                    : AppColors.warningAmber,
-                              ),
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: StatCard(
+                                    value: daysUntilNextDonation.toString(),
+                                    label: daysUntilNextDonation == 0
+                                        ? 'Can Donate'
+                                        : 'Days Left',
+                                    icon: Icons.access_time,
+                                    color: daysUntilNextDonation == 0
+                                        ? AppColors.hopeGreen
+                                        : AppColors.warningAmber,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: StatCard(
+                                    value: donationHistory
+                                        .where((d) => d.status == 'scheduled')
+                                        .length
+                                        .toString(),
+                                    label: 'Scheduled',
+                                    icon: Icons.calendar_today,
+                                    color: Colors.blue,
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
@@ -710,20 +751,48 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void _handleLogout() async {
     final confirm = await showDialog<bool>(
       context: context,
+      barrierDismissible: false,
       builder: (context) => AlertDialog(
-        title: const Text('Logout'),
-        content: const Text('Are you sure you want to logout?'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.logout, color: AppColors.bloodRed, size: 28),
+            const SizedBox(width: 12),
+            const Text(
+              'লগআউট করবেন?',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        content: const Text(
+          'আপনি কি নিশ্চিত যে আপনি লগআউট করতে চান?\n\nলগআউট করলে আপনাকে আবার লগইন করতে হবে।',
+          style: TextStyle(fontSize: 16),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
             style: TextButton.styleFrom(
-              foregroundColor: Theme.of(context).colorScheme.error,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
             ),
-            child: const Text('Logout'),
+            child: const Text(
+              'না, থাকবো',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.bloodRed,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: const Text(
+              'হ্যাঁ, লগআউট করুন',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
           ),
         ],
       ),
@@ -732,7 +801,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (confirm == true) {
       try {
         await fb_auth.FirebaseAuth.instance.signOut();
-      } catch (_) {}
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Row(
+                children: [
+                  Icon(Icons.check_circle, color: Colors.white),
+                  SizedBox(width: 12),
+                  Text('সফলভাবে লগআউট হয়েছে'),
+                ],
+              ),
+              backgroundColor: AppColors.hopeGreen,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('লগআউট করতে সমস্যা: ${e.toString()}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
       if (mounted) {
         Navigator.pushNamedAndRemoveUntil(
           context,

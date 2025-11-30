@@ -28,7 +28,7 @@ class WelcomeScreen extends StatelessWidget {
                     width: 120,
                     height: 120,
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
+                      color: Colors.white.withValues(alpha: 0.2),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(
@@ -62,7 +62,7 @@ class WelcomeScreen extends StatelessWidget {
                   child: Text(
                     appTagline,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: Colors.white.withOpacity(0.9),
+                      color: Colors.white.withValues(alpha: 0.9),
                       letterSpacing: 0.5,
                     ),
                     textAlign: TextAlign.center,
@@ -92,7 +92,7 @@ class WelcomeScreen extends StatelessWidget {
                     borderRadius: BorderRadius.circular(30),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.2),
+                        color: Colors.black.withValues(alpha: 0.2),
                         blurRadius: 12,
                         offset: const Offset(0, 6),
                       ),
@@ -152,13 +152,50 @@ class WelcomeScreen extends StatelessWidget {
                   child: Text(
                     'Continue as Guest',
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: Colors.white.withOpacity(0.8),
+                      color: Colors.white.withValues(alpha: 0.8),
                       decoration: TextDecoration.underline,
-                      decorationColor: Colors.white.withOpacity(0.8),
+                      decorationColor: Colors.white.withValues(alpha: 0.8),
                     ),
                   ),
                 ),
-                const SizedBox(height: 20),
+
+                // Hidden admin setup button (for first-time setup only)
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    GestureDetector(
+                      onLongPress: () {
+                        Navigator.pushNamed(context, '/super-admin-setup');
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        child: Text(
+                          'v1.0',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: Colors.white.withValues(alpha: 0.3),
+                              ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    GestureDetector(
+                      onLongPress: () {
+                        Navigator.pushNamed(context, '/demo-data');
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        child: Icon(
+                          Icons.data_object,
+                          color: Colors.white.withValues(alpha: 0.3),
+                          size: 20,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
               ],
             ),
           ),
@@ -171,12 +208,12 @@ class WelcomeScreen extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Icon(icon, color: Colors.white.withOpacity(0.9), size: 20),
+        Icon(icon, color: Colors.white.withValues(alpha: 0.9), size: 20),
         const SizedBox(width: 8),
         Text(
           text,
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            color: Colors.white.withOpacity(0.9),
+            color: Colors.white.withValues(alpha: 0.9),
           ),
         ),
       ],

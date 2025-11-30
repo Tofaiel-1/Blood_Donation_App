@@ -19,9 +19,12 @@ class _SignupScreenState extends State<SignupScreen> {
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
+  final _ageController = TextEditingController();
+  final _addressController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   String? _selectedBloodType;
+  String? _selectedGender;
   bool _isPasswordVisible = false;
   bool _isConfirmPasswordVisible = false;
   bool _isSubmitting = false;
@@ -32,6 +35,8 @@ class _SignupScreenState extends State<SignupScreen> {
     _nameController.dispose();
     _emailController.dispose();
     _phoneController.dispose();
+    _ageController.dispose();
+    _addressController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
@@ -73,7 +78,7 @@ class _SignupScreenState extends State<SignupScreen> {
                             width: 80,
                             height: 80,
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.2),
+                              color: Colors.white.withValues(alpha: 0.2),
                               shape: BoxShape.circle,
                             ),
                             child: const Icon(
@@ -96,7 +101,7 @@ class _SignupScreenState extends State<SignupScreen> {
                             'Join us and start saving lives',
                             style: Theme.of(context).textTheme.bodyLarge
                                 ?.copyWith(
-                                  color: Colors.white.withOpacity(0.9),
+                                  color: Colors.white.withValues(alpha: 0.9),
                                 ),
                           ),
                         ],
@@ -144,6 +149,99 @@ class _SignupScreenState extends State<SignupScreen> {
                             ),
                             const SizedBox(height: 16),
 
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _buildTextField(
+                                    controller: _ageController,
+                                    label: 'Age',
+                                    hint: 'Age',
+                                    icon: Icons.cake_outlined,
+                                    keyboardType: TextInputType.number,
+                                    validator: (v) {
+                                      if (v == null || v.isEmpty) {
+                                        return 'Required';
+                                      }
+                                      final age = int.tryParse(v);
+                                      if (age == null ||
+                                          age < 18 ||
+                                          age > 100) {
+                                        return '18-100';
+                                      }
+                                      return null;
+                                    },
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Gender',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .labelLarge
+                                            ?.copyWith(
+                                              color: Theme.of(
+                                                context,
+                                              ).colorScheme.onSurface,
+                                            ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      DropdownButtonFormField<String>(
+                                        value: _selectedGender,
+                                        decoration: InputDecoration(
+                                          hintText: 'Select',
+                                          prefixIcon: Icon(
+                                            Icons.person_outline,
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.primary,
+                                          ),
+                                          filled: true,
+                                          fillColor: Theme.of(context)
+                                              .colorScheme
+                                              .primary
+                                              .withValues(alpha: 0.05),
+                                          border: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                            borderSide: BorderSide.none,
+                                          ),
+                                        ),
+                                        items: ['Male', 'Female', 'Other']
+                                            .map(
+                                              (g) => DropdownMenuItem(
+                                                value: g,
+                                                child: Text(g),
+                                              ),
+                                            )
+                                            .toList(),
+                                        onChanged: (v) =>
+                                            setState(() => _selectedGender = v),
+                                        validator: (v) =>
+                                            v == null ? 'Required' : null,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+
+                            _buildTextField(
+                              controller: _addressController,
+                              label: 'Address',
+                              hint: 'Enter your address (e.g. Dhaka)',
+                              icon: Icons.location_on_outlined,
+                              validator: (v) =>
+                                  v == null || v.isEmpty ? 'Required' : null,
+                            ),
+                            const SizedBox(height: 16),
+
                             // Blood Type Dropdown
                             Text(
                               'Blood Type',
@@ -166,7 +264,7 @@ class _SignupScreenState extends State<SignupScreen> {
                                 filled: true,
                                 fillColor: Theme.of(
                                   context,
-                                ).colorScheme.primary.withOpacity(0.05),
+                                ).colorScheme.primary.withValues(alpha: 0.05),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
                                   borderSide: BorderSide.none,
@@ -174,9 +272,8 @@ class _SignupScreenState extends State<SignupScreen> {
                                 enabledBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
                                   borderSide: BorderSide(
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.outline.withOpacity(0.2),
+                                    color: Theme.of(context).colorScheme.outline
+                                        .withValues(alpha: 0.2),
                                   ),
                                 ),
                                 focusedBorder: OutlineInputBorder(
@@ -315,7 +412,7 @@ class _SignupScreenState extends State<SignupScreen> {
                         borderRadius: BorderRadius.circular(30),
                         boxShadow: [
                           BoxShadow(
-                            color: AppColors.bloodRed.withOpacity(0.4),
+                            color: AppColors.bloodRed.withValues(alpha: 0.4),
                             blurRadius: 12,
                             offset: const Offset(0, 6),
                           ),
@@ -416,7 +513,9 @@ class _SignupScreenState extends State<SignupScreen> {
             ),
             suffixIcon: suffixIcon,
             filled: true,
-            fillColor: Theme.of(context).colorScheme.primary.withOpacity(0.05),
+            fillColor: Theme.of(
+              context,
+            ).colorScheme.primary.withValues(alpha: 0.05),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide.none,
@@ -424,7 +523,9 @@ class _SignupScreenState extends State<SignupScreen> {
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(
-                color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
+                color: Theme.of(
+                  context,
+                ).colorScheme.outline.withValues(alpha: 0.2),
               ),
             ),
             focusedBorder: OutlineInputBorder(
@@ -470,6 +571,9 @@ class _SignupScreenState extends State<SignupScreen> {
     final password = _passwordController.text.trim();
     final name = _nameController.text.trim();
     final phone = _phoneController.text.trim();
+    final age = int.parse(_ageController.text.trim());
+    final address = _addressController.text.trim();
+    final gender = _selectedGender!;
     final bloodType = _selectedBloodType!;
 
     final newUser = User(
@@ -477,6 +581,9 @@ class _SignupScreenState extends State<SignupScreen> {
       name: name,
       bloodType: bloodType,
       phone: phone,
+      age: age,
+      gender: gender,
+      address: address,
     );
 
     try {
@@ -495,6 +602,7 @@ class _SignupScreenState extends State<SignupScreen> {
             ),
           ),
         );
+        // Offline mode - navigate to home with User object (not Map)
         Navigator.pushReplacementNamed(context, '/home', arguments: newUser);
         return;
       }
@@ -515,34 +623,38 @@ class _SignupScreenState extends State<SignupScreen> {
         'name': name,
         'bloodType': bloodType,
         'phone': phone,
+        'age': age,
+        'gender': gender,
+        'address': address,
         'role': 'user',
         'isDonor': false,
-        'emailVerified': credential.user?.emailVerified ?? false,
+        'emailVerified': false,
+        'phoneVerified': false,
         'createdAt': FieldValue.serverTimestamp(),
       });
 
       if (!mounted) return;
 
-      // Show success message
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Row(
-            children: [
-              Icon(Icons.check_circle, color: Colors.white),
-              SizedBox(width: 12),
-              Expanded(child: Text('Account created successfully!')),
-            ],
-          ),
-          backgroundColor: AppColors.hopeGreen,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
+      // Regular users go to verification, admins skip verification
+      // Admin accounts should be created by super admin through dashboard
+      Navigator.pushReplacementNamed(
+        context,
+        '/verification',
+        arguments: {
+          'email': email,
+          'phone': phone,
+          'userData': {
+            'email': newUser.email,
+            'name': newUser.name,
+            'bloodType': newUser.bloodType,
+            'phone': newUser.phone,
+            'age': newUser.age,
+            'gender': newUser.gender,
+            'address': newUser.address,
+            'role': newUser.role.toString().split('.').last,
+          },
+        },
       );
-
-      // Navigate to home
-      Navigator.pushReplacementNamed(context, '/home', arguments: newUser);
     } on fb_auth.FirebaseAuthException catch (e) {
       if (!mounted) return;
 

@@ -149,7 +149,7 @@ class _ThemeShowcaseScreenState extends State<ThemeShowcaseScreen> {
                     ),
                   ),
                   Text(
-                    '#${colorItem.color.value.toRadixString(16).substring(2).toUpperCase()}',
+                    '#${colorItem.color.toARGB32().toRadixString(16).substring(2).toUpperCase()}',
                     style: TextStyle(
                       color: _getContrastColor(
                         colorItem.color,

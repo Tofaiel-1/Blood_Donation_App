@@ -56,11 +56,16 @@ dependencies:
   # Advanced theming with flex_color_scheme
   flex_color_scheme: ^8.0.2
   google_fonts: ^6.2.1
+  fl_chart: ^0.69.0
 
   # Location services for maps and directions
   geolocator: ^14.0.2
   permission_handler: ^11.3.1
   url_launcher: ^6.3.1
+
+  # Offline storage for demo data
+  shared_preferences: ^2.3.3
+  package_info_plus: ^8.1.2
 
 dev_dependencies:
   flutter_test:

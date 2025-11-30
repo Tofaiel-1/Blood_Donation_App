@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 enum UserRole { superAdmin, orgAdmin, user }
 
 class User {
@@ -6,6 +8,10 @@ class User {
   final String bloodType;
   final String? phone;
   final UserRole role;
+  final int? age;
+  final String? gender;
+  final String? address;
+  final DateTime? lastDonationDate;
 
   User({
     required this.email,
@@ -13,13 +19,19 @@ class User {
     required this.bloodType,
     this.phone,
     this.role = UserRole.user,
+    this.age,
+    this.gender,
+    this.address,
+    this.lastDonationDate,
   });
 
   factory User.fromMap(Map<String, dynamic> map) {
     UserRole role = UserRole.user;
-    if (map['role'] == 'superAdmin') {
+    final roleStr = map['role']?.toString().toLowerCase() ?? '';
+
+    if (roleStr == 'superadmin' || roleStr == 'admin') {
       role = UserRole.superAdmin;
-    } else if (map['role'] == 'orgAdmin') {
+    } else if (roleStr == 'orgadmin') {
       role = UserRole.orgAdmin;
     }
 
@@ -29,6 +41,10 @@ class User {
       bloodType: map['bloodType'] ?? 'N/A',
       phone: map['phone'],
       role: role,
+      age: map['age'],
+      gender: map['gender'],
+      address: map['address'],
+      lastDonationDate: (map['lastDonationDate'] as Timestamp?)?.toDate(),
     );
   }
 }

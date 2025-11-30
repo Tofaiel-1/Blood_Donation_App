@@ -170,7 +170,9 @@ class _HomeScreenState extends State<HomeScreen>
                           children: [
                             CircleAvatar(
                               radius: 30,
-                              backgroundColor: Colors.white.withOpacity(0.3),
+                              backgroundColor: Colors.white.withValues(
+                                alpha: 0.3,
+                              ),
                               child: Text(
                                 currentUser.name.isNotEmpty
                                     ? currentUser.name[0].toUpperCase()
@@ -191,7 +193,9 @@ class _HomeScreenState extends State<HomeScreen>
                                     'Welcome Back,',
                                     style: Theme.of(context).textTheme.bodyLarge
                                         ?.copyWith(
-                                          color: Colors.white.withOpacity(0.9),
+                                          color: Colors.white.withValues(
+                                            alpha: 0.9,
+                                          ),
                                         ),
                                   ),
                                   Text(

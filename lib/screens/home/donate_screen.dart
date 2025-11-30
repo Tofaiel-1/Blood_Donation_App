@@ -42,7 +42,7 @@ class _DonateScreenState extends State<DonateScreen>
   void initState() {
     super.initState();
     _tabController = TabController(
-      length: 3,
+      length: 4,
       vsync: this,
       initialIndex: widget.initialTabIndex,
     );
@@ -104,15 +104,15 @@ class _DonateScreenState extends State<DonateScreen>
       }).toList();
     } catch (e) {
       // Print full error to debug console for index URL
-      print('\n========== DONATION HISTORY ERROR ==========');
-      print('Error: $e');
-      print('Error type: ${e.runtimeType}');
+      debugPrint('\n========== DONATION HISTORY ERROR ==========');
+      debugPrint('Error: $e');
+      debugPrint('Error type: ${e.runtimeType}');
       if (e.toString().contains('index')) {
-        print(
+        debugPrint(
           '\nCOPY THE URL ABOVE AND PASTE IT IN YOUR BROWSER TO CREATE THE INDEX',
         );
       }
-      print('==========================================\n');
+      debugPrint('==========================================\n');
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -149,15 +149,15 @@ class _DonateScreenState extends State<DonateScreen>
       }).toList();
     } catch (e) {
       // Print full error to debug console for index URL
-      print('\n========== DONATION CENTERS ERROR ==========');
-      print('Error: $e');
-      print('Error type: ${e.runtimeType}');
+      debugPrint('\n========== DONATION CENTERS ERROR ==========');
+      debugPrint('Error: $e');
+      debugPrint('Error type: ${e.runtimeType}');
       if (e.toString().contains('index')) {
-        print(
+        debugPrint(
           '\nCOPY THE URL ABOVE AND PASTE IT IN YOUR BROWSER TO CREATE THE INDEX',
         );
       }
-      print('==========================================\n');
+      debugPrint('==========================================\n');
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -222,6 +222,7 @@ class _DonateScreenState extends State<DonateScreen>
           indicatorColor: Colors.white,
           tabs: const [
             Tab(text: 'Schedule'),
+            Tab(text: 'Complete'),
             Tab(text: 'History'),
             Tab(text: 'Centers'),
           ],
@@ -229,9 +230,14 @@ class _DonateScreenState extends State<DonateScreen>
       ),
       body: IndexedStack(
         index: _selectedTabIndex,
-        children: [_buildScheduleTab(), _buildHistoryTab(), _buildCentersTab()],
+        children: [
+          _buildScheduleTab(),
+          _buildCompleteDonationTab(),
+          _buildHistoryTab(),
+          _buildCentersTab(),
+        ],
       ),
-      floatingActionButton: _selectedTabIndex == 2
+      floatingActionButton: _selectedTabIndex == 3
           ? FloatingActionButton.extended(
               onPressed: _getUserLocation,
               icon: _isLoadingLocation
@@ -253,6 +259,409 @@ class _DonateScreenState extends State<DonateScreen>
               foregroundColor: Colors.white,
             )
           : null,
+    );
+  }
+
+  Widget _buildCompleteDonationTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Card(
+            color: Colors.green[50],
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.green[100],
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.volunteer_activism,
+                      color: Colors.green,
+                      size: 32,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Complete Your Donation',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.green[800],
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Log your completed blood donation',
+                          style: TextStyle(color: Colors.green[700]),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            'Total Donations: ${donationHistory.where((d) => d.status == 'completed').length}',
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'You have saved approximately ${donationHistory.where((d) => d.status == 'completed').length * 3} lives!',
+            style: TextStyle(
+              fontSize: 16,
+              color: Colors.grey[700],
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+          const SizedBox(height: 30),
+          Card(
+            elevation: 2,
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Log New Donation',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Select where you donated:',
+                    style: TextStyle(fontSize: 14),
+                  ),
+                  const SizedBox(height: 12),
+                  ...donationCenters.map(
+                    (center) => Card(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      child: ListTile(
+                        leading: const Icon(
+                          Icons.location_on,
+                          color: AppColors.bloodRed,
+                        ),
+                        title: Text(center.name),
+                        subtitle: Text(center.address),
+                        trailing: ElevatedButton(
+                          onPressed: () => _completeDonation(center),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                            foregroundColor: Colors.white,
+                          ),
+                          child: const Text('Complete'),
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (donationCenters.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.all(16.0),
+                      child: Center(
+                        child: Text(
+                          'No donation centers available',
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Card(
+            color: Colors.blue[50],
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.info_outline, color: Colors.blue[700]),
+                      const SizedBox(width: 8),
+                      Text(
+                        'After Donation Care',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue[800],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  _buildAfterCareItem('Rest for 10-15 minutes'),
+                  _buildAfterCareItem('Drink plenty of fluids'),
+                  _buildAfterCareItem('Eat a healthy snack'),
+                  _buildAfterCareItem('Avoid heavy lifting for 24 hours'),
+                  _buildAfterCareItem('Keep the bandage on for 4-6 hours'),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAfterCareItem(String text) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          const Icon(Icons.check_circle, color: Colors.green, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(text, style: TextStyle(color: Colors.grey[800])),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _completeDonation(DonationCenter center) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirm Donation'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Did you donate blood at ${center.name}?'),
+            const SizedBox(height: 12),
+            const Text(
+              'This will be added to your donation history.',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Yes, Confirm'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await _saveDonation(center);
+    }
+  }
+
+  Future<void> _saveDonation(DonationCenter center) async {
+    try {
+      final user = fb_auth.FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        throw Exception('User not logged in');
+      }
+
+      // Get user profile for name and blood type
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+
+      final userData = userDoc.data() ?? {};
+
+      // Add donation to Firestore
+      await FirebaseFirestore.instance.collection('donations').add({
+        'donorId': user.uid,
+        'donorName': userData['name'] ?? 'User',
+        'bloodType': userData['bloodType'] ?? 'Unknown',
+        'donationDate': Timestamp.fromDate(DateTime.now()),
+        'location': center.name,
+        'status': 'completed',
+        'notes': 'Completed via app',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      // Update user's total donation count in Firestore
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .update({
+            'totalDonations': FieldValue.increment(1),
+            'lastDonationDate': Timestamp.fromDate(DateTime.now()),
+          });
+
+      // Reload donation history
+      await _loadDonationHistory();
+
+      if (mounted) {
+        setState(() {});
+
+        // Show success message
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        '🎉 Donation Recorded!',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      Text(
+                        'Total donations: ${donationHistory.where((d) => d.status == "completed").length}',
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 4),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+
+        // Show congratulations dialog
+        _showCongratulationsDialog(
+          donationHistory.where((d) => d.status == 'completed').length,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error recording donation: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    }
+  }
+
+  void _showCongratulationsDialog(int totalDonations) {
+    final livesImpacted = totalDonations * 3;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.green[100],
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.favorite, color: Colors.green, size: 32),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Thank You!',
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'You have completed',
+              style: TextStyle(fontSize: 16, color: Colors.grey[700]),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '$totalDonations',
+              style: const TextStyle(
+                fontSize: 48,
+                fontWeight: FontWeight.bold,
+                color: AppColors.bloodRed,
+              ),
+            ),
+            Text(
+              totalDonations == 1 ? 'donation' : 'donations',
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.green[50],
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                children: [
+                  const Text(
+                    '💚 Lives Potentially Saved',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Up to $livesImpacted people',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.green,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Your generosity makes a real difference!',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 14, fontStyle: FontStyle.italic),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              // Switch to history tab to see the new donation
+              setState(() {
+                _selectedTabIndex = 2;
+                _tabController.animateTo(2);
+              });
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.bloodRed,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('View History'),
+          ),
+        ],
+      ),
     );
   }
 

@@ -6,6 +6,7 @@ import 'config/routes.dart';
 import 'firebase_options.dart';
 import 'utils/theme_manager.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'services/demo_data_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -57,6 +58,11 @@ Future<void> main() async {
   if (!firebaseConfigured && allowOfflineMode) {
     firebaseConfigured = true; // treat as available for UI flow (offline mode)
     debugPrint('Firebase not configured — running in offline/demo mode.');
+  }
+
+  // Start auto sync service for offline data
+  if (firebaseConfigured) {
+    DemoDataService().startAutoSync();
   }
 
   runApp(

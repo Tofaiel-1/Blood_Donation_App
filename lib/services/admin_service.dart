@@ -192,13 +192,15 @@ class AdminService {
     return _firestore
         .collection('bloodRequests')
         .where('assignedAdminId', isEqualTo: adminId)
-        .orderBy('requestDate', descending: true)
         .snapshots()
-        .map(
-          (snapshot) => snapshot.docs
+        .map((snapshot) {
+          final requests = snapshot.docs
               .map((doc) => BloodRequest.fromFirestore(doc))
-              .toList(),
-        );
+              .toList();
+          // Sort client-side to avoid composite index requirement
+          requests.sort((a, b) => b.requestDate.compareTo(a.requestDate));
+          return requests;
+        });
   }
 
   /// Create blood request

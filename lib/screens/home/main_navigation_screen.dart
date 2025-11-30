@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../models/user.dart';
 import '../../utils/app_colors.dart';
+import '../../utils/responsive.dart';
+import '../../services/notification_service.dart';
+import '../notifications_screen.dart';
 import 'home_screen.dart';
 import 'search_screen.dart';
 import 'donate_screen.dart';
@@ -18,6 +22,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int _currentIndex = 0;
   User? currentUser;
   Key _homeScreenKey = UniqueKey();
+  final NotificationService _notificationService = NotificationService();
 
   void _changeTab(int index) {
     setState(() {
@@ -69,34 +74,56 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           barrierDismissible: false,
           builder: (context) => AlertDialog(
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(
+                Responsive.responsiveBorderRadius(context),
+              ),
             ),
+            contentPadding: Responsive.responsiveCardPadding(context),
             title: Row(
               children: [
-                Icon(Icons.exit_to_app, color: AppColors.bloodRed, size: 28),
-                const SizedBox(width: 12),
-                const Text(
-                  'অ্যাপ থেকে বের হবেন?',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                Icon(
+                  Icons.exit_to_app,
+                  color: AppColors.bloodRed,
+                  size: Responsive.responsiveIconSize(context) + 4,
+                ),
+                SizedBox(width: Responsive.responsiveSpacing(context) * 0.5),
+                Flexible(
+                  child: Text(
+                    'অ্যাপ থেকে বের হবেন?',
+                    style: TextStyle(
+                      fontSize: Responsive.responsiveTextSize(
+                        context,
+                        mobile: 18.0,
+                        tablet: 20.0,
+                        desktop: 22.0,
+                      ),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
               ],
             ),
-            content: const Text(
+            content: Text(
               'আপনি কি নিশ্চিত যে আপনি Blood Donation App থেকে বের হতে চান?',
-              style: TextStyle(fontSize: 16),
+              style: TextStyle(
+                fontSize: Responsive.responsiveTextSize(context),
+              ),
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(context).pop(false),
                 style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 12,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: Responsive.responsiveSpacing(context),
+                    vertical: Responsive.responsiveSpacing(context) * 0.6,
                   ),
                 ),
-                child: const Text(
+                child: Text(
                   'না, থাকবো',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  style: TextStyle(
+                    fontSize: Responsive.responsiveTextSize(context),
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
               ElevatedButton(
@@ -104,17 +131,22 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.bloodRed,
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 12,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: Responsive.responsiveSpacing(context),
+                    vertical: Responsive.responsiveSpacing(context) * 0.6,
                   ),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(
+                      Responsive.responsiveBorderRadius(context) * 0.5,
+                    ),
                   ),
                 ),
-                child: const Text(
+                child: Text(
                   'হ্যাঁ, বের হব',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  style: TextStyle(
+                    fontSize: Responsive.responsiveTextSize(context),
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ],
@@ -122,38 +154,120 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         );
 
         if (shouldExit == true && context.mounted) {
-          // SystemNavigator.pop(); // Optional: if you want to close the app
-          // Since we are in a navigation stack, we might just want to let it pop if it's the root
-          // But PopScope with canPop: false prevents popping.
-          // If we want to allow exit, we should set canPop to true or manually pop.
-          // However, onPopInvoked is called.
-          // If we want to exit the app, we can use SystemNavigator.pop()
-          // Or if we just want to pop the route:
-          // Navigator.of(context).pop();
-          // But wait, onWillPop expected a boolean to decide whether to pop.
-          // PopScope is different.
-          // If we want to allow pop, we should have canPop: true or update state.
-          // But here we want to show dialog first.
-          // So we keep canPop: false.
-          // If user says yes, we can call SystemNavigator.pop() or Navigator.pop(context).
-          // Since this is MainNavigationScreen, likely the root, so SystemNavigator.pop() is appropriate for "Exit App".
-          // But usually in Flutter we don't exit app programmatically on iOS.
-          // Let's assume we just want to pop if confirmed.
-          // But we can't pop if canPop is false.
-          // We can use SystemChannels.platform.invokeMethod('SystemNavigator.pop');
-          // Or we can change canPop to true and call pop again? No that's complex.
-          // The standard migration for WillPopScope to PopScope for "Exit App confirmation":
-          // Use canPop: false. In onPopInvoked, show dialog. If yes, SystemNavigator.pop().
-          // I need to import 'package:flutter/services.dart';
+          // Exit the app
+          SystemNavigator.pop();
         }
       },
       child: Scaffold(
+        backgroundColor: Colors.white,
+        appBar: _currentIndex == 0
+            ? AppBar(
+                title: Text(
+                  'Blood Donation',
+                  style: TextStyle(
+                    fontSize: Responsive.responsiveTextSize(
+                      context,
+                      mobile: 18.0,
+                      tablet: 20.0,
+                      desktop: 22.0,
+                    ),
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                backgroundColor: Colors.transparent,
+                elevation: 0,
+                automaticallyImplyLeading: false,
+                toolbarHeight: Responsive.responsiveAppBarHeight(context),
+                actions: [
+                  StreamBuilder<int>(
+                    stream: _notificationService.getUnreadNotificationCount(),
+                    builder: (context, snapshot) {
+                      final unreadCount = snapshot.data ?? 0;
+                      return Stack(
+                        children: [
+                          IconButton(
+                            icon: Icon(
+                              Icons.notifications_outlined,
+                              size: Responsive.responsiveIconSize(context),
+                            ),
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) =>
+                                      const NotificationsScreen(),
+                                ),
+                              );
+                            },
+                            tooltip: 'Notifications',
+                          ),
+                          if (unreadCount > 0)
+                            Positioned(
+                              right: Responsive.isMobile(context) ? 8 : 10,
+                              top: Responsive.isMobile(context) ? 8 : 10,
+                              child: Container(
+                                padding: EdgeInsets.all(
+                                  Responsive.isMobile(context) ? 4 : 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.red,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Colors.white,
+                                    width: 1,
+                                  ),
+                                ),
+                                constraints: BoxConstraints(
+                                  minWidth: Responsive.isMobile(context)
+                                      ? 18
+                                      : 20,
+                                  minHeight: Responsive.isMobile(context)
+                                      ? 18
+                                      : 20,
+                                ),
+                                child: Text(
+                                  unreadCount > 99
+                                      ? '99+'
+                                      : unreadCount.toString(),
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: Responsive.isMobile(context)
+                                        ? 10
+                                        : 11,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                            ),
+                        ],
+                      );
+                    },
+                  ),
+                  SizedBox(width: Responsive.responsiveSpacing(context) * 0.5),
+                ],
+              )
+            : null,
         body: IndexedStack(index: _currentIndex, children: _getScreens()),
         bottomNavigationBar: BottomNavigationBar(
           type: BottomNavigationBarType.fixed,
           currentIndex: _currentIndex,
           selectedItemColor: AppColors.bloodRed,
           unselectedItemColor: Colors.grey[600],
+          iconSize: Responsive.responsiveIconSize(context),
+          selectedFontSize: Responsive.responsiveTextSize(
+            context,
+            mobile: 12.0,
+            tablet: 13.0,
+            desktop: 14.0,
+          ),
+          unselectedFontSize: Responsive.responsiveTextSize(
+            context,
+            mobile: 10.0,
+            tablet: 11.0,
+            desktop: 12.0,
+          ),
+          elevation: Responsive.responsiveElevation(context),
           onTap: (index) {
             setState(() {
               // Regenerate home screen key when switching back to home from profile
@@ -182,11 +296,24 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                 onPressed: () {
                   Navigator.pushNamed(context, '/user-blood-request');
                 },
-                icon: const Icon(Icons.bloodtype),
-                label: const Text('Request Blood'),
+                icon: Icon(
+                  Icons.bloodtype,
+                  size: Responsive.responsiveIconSize(context),
+                ),
+                label: Text(
+                  'Request Blood',
+                  style: TextStyle(
+                    fontSize: Responsive.responsiveTextSize(
+                      context,
+                      mobile: 12.0,
+                      tablet: 14.0,
+                      desktop: 16.0,
+                    ),
+                  ),
+                ),
                 backgroundColor: AppColors.bloodRed,
                 foregroundColor: Colors.white,
-                elevation: 6,
+                elevation: Responsive.responsiveElevation(context),
               )
             : null,
         floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,

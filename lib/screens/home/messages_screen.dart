@@ -88,6 +88,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
         title: Text('Messages', style: TextStyle(color: Colors.white)),
         backgroundColor: Colors.red[700],
@@ -711,22 +712,29 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: ListView.builder(
-              padding: EdgeInsets.all(16),
-              itemCount: messages.length,
-              itemBuilder: (context, index) {
-                final message = messages[index];
-                final isMe =
-                    message.senderId == widget.chatRoom.participants[0];
-                return _buildMessageBubble(message, isMe);
-              },
+      backgroundColor: Colors.white,
+      body: Container(
+        color: Colors.white,
+        child: Column(
+          children: [
+            Expanded(
+              child: Container(
+                color: Colors.white,
+                child: ListView.builder(
+                  padding: EdgeInsets.all(16),
+                  itemCount: messages.length,
+                  itemBuilder: (context, index) {
+                    final message = messages[index];
+                    final isMe =
+                        message.senderId == widget.chatRoom.participants[0];
+                    return _buildMessageBubble(message, isMe);
+                  },
+                ),
+              ),
             ),
-          ),
-          _buildMessageInput(),
-        ],
+            _buildMessageInput(),
+          ],
+        ),
       ),
     );
   }

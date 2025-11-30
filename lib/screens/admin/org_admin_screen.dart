@@ -52,6 +52,7 @@ class _OrgAdminScreenState extends State<OrgAdminScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -130,7 +131,6 @@ class _OrgAdminScreenState extends State<OrgAdminScreen>
             stream: FirebaseFirestore.instance
                 .collection('bloodRequests')
                 .where('assignedAdminId', isEqualTo: _adminId)
-                .orderBy('requestDate', descending: true)
                 .snapshots(),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
@@ -141,9 +141,22 @@ class _OrgAdminScreenState extends State<OrgAdminScreen>
                 return Center(child: Text('Error: ${snapshot.error}'));
               }
 
-              final requests = snapshot.data?.docs ?? [];
+              final docs = snapshot.data?.docs ?? [];
+              // Sort client-side to avoid composite index requirement
+              docs.sort((a, b) {
+                final aDate =
+                    (a.data() as Map<String, dynamic>)['requestDate']
+                        as Timestamp?;
+                final bDate =
+                    (b.data() as Map<String, dynamic>)['requestDate']
+                        as Timestamp?;
+                if (aDate == null && bDate == null) return 0;
+                if (aDate == null) return 1;
+                if (bDate == null) return -1;
+                return bDate.compareTo(aDate); // descending
+              });
 
-              if (requests.isEmpty) {
+              if (docs.isEmpty) {
                 return Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -170,9 +183,9 @@ class _OrgAdminScreenState extends State<OrgAdminScreen>
 
               return ListView.builder(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: requests.length,
+                itemCount: docs.length,
                 itemBuilder: (context, index) {
-                  final request = BloodRequest.fromFirestore(requests[index]);
+                  final request = BloodRequest.fromFirestore(docs[index]);
                   return _buildRequestCard(request);
                 },
               );

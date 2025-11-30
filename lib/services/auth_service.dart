@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:flutter/foundation.dart';
 
 /// 🔐 AUTHENTICATION SERVICE
 ///
@@ -82,11 +83,16 @@ class AuthService {
   ///
   /// এটা clear করে:
   /// - Firebase Auth session
-  /// - Google Sign-in session
+  /// - Google Sign-in session (if available)
   ///
   /// Used in: lib/screens/home/profile_screen.dart
   Future<void> signOut() async {
-    await _google.signOut();
+    try {
+      await _google.signOut();
+    } catch (e) {
+      // Google sign out may fail on web without client ID - ignore
+      debugPrint('Google signOut skipped: $e');
+    }
     await _auth.signOut();
   }
 

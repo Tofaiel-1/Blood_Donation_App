@@ -6,7 +6,8 @@ import 'app_colors.dart';
 /// Comprehensive theme manager for Blood Donation App
 /// Using flex_color_scheme for advanced theming capabilities
 class ThemeManager extends ChangeNotifier {
-  ThemeMode _themeMode = ThemeMode.system;
+  ThemeMode _themeMode =
+      ThemeMode.light; // Force light mode for better visibility
 
   ThemeMode get themeMode => _themeMode;
 

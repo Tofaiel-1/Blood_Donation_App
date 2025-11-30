@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../utils/constants.dart';
 import '../utils/app_colors.dart';
+import '../utils/responsive.dart';
 
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});
@@ -11,193 +12,377 @@ class WelcomeScreen extends StatelessWidget {
       body: Container(
         decoration: const BoxDecoration(gradient: AppColors.primaryGradient),
         child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              children: [
-                const Spacer(),
-
-                // Hero section with animated logo
-                TweenAnimationBuilder<double>(
-                  tween: Tween(begin: 0.0, end: 1.0),
-                  duration: const Duration(milliseconds: 800),
-                  builder: (context, value, child) {
-                    return Transform.scale(scale: value, child: child);
-                  },
-                  child: Container(
-                    width: 120,
-                    height: 120,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.2),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.bloodtype,
-                      color: Colors.white,
-                      size: 80,
-                    ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return SingleChildScrollView(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minHeight: constraints.maxHeight,
+                    maxWidth: Responsive.responsiveMaxWidth(context),
                   ),
-                ),
-                const SizedBox(height: 40),
-
-                // App Title with custom styling
-                Text(
-                  appName,
-                  style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.5,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 12),
-
-                // Tagline with fade-in effect
-                TweenAnimationBuilder<double>(
-                  tween: Tween(begin: 0.0, end: 1.0),
-                  duration: const Duration(milliseconds: 1000),
-                  builder: (context, value, child) {
-                    return Opacity(opacity: value, child: child);
-                  },
-                  child: Text(
-                    appTagline,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: Colors.white.withValues(alpha: 0.9),
-                      letterSpacing: 0.5,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-                const SizedBox(height: 20),
-
-                // Feature highlights
-                _buildFeatureRow(context, Icons.verified_user, 'Safe & Secure'),
-                const SizedBox(height: 12),
-                _buildFeatureRow(context, Icons.people, 'Connect with Donors'),
-                const SizedBox(height: 12),
-                _buildFeatureRow(
-                  context,
-                  Icons.emergency,
-                  'Emergency Requests',
-                ),
-
-                const Spacer(),
-
-                // Login Button with gradient
-                Container(
-                  width: double.infinity,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(30),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.2),
-                        blurRadius: 12,
-                        offset: const Offset(0, 6),
-                      ),
-                    ],
-                  ),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: () => Navigator.pushNamed(context, '/login'),
-                      borderRadius: BorderRadius.circular(30),
-                      child: Center(
-                        child: Text(
-                          'Log In',
-                          style: Theme.of(context).textTheme.titleLarge
-                              ?.copyWith(
-                                color: AppColors.bloodRed,
-                                fontWeight: FontWeight.bold,
+                  child: Center(
+                    child: Padding(
+                      padding: Responsive.responsiveHorizontalPadding(context)
+                          .copyWith(
+                            top: Responsive.responsiveSpacing(context),
+                            bottom: Responsive.responsiveSpacing(context),
+                          ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          // Top Section - Logo and Title
+                          Column(
+                            children: [
+                              SizedBox(
+                                height:
+                                    Responsive.responsiveSpacing(context) * 2,
                               ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
 
-                // Sign Up Button with border
-                Container(
-                  width: double.infinity,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.white, width: 2),
-                    borderRadius: BorderRadius.circular(30),
-                  ),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: () => Navigator.pushNamed(context, '/signup'),
-                      borderRadius: BorderRadius.circular(30),
-                      child: Center(
-                        child: Text(
-                          'Sign Up',
-                          style: Theme.of(context).textTheme.titleLarge
-                              ?.copyWith(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
+                              // Hero section with animated logo
+                              TweenAnimationBuilder<double>(
+                                tween: Tween(begin: 0.0, end: 1.0),
+                                duration: const Duration(milliseconds: 800),
+                                builder: (context, value, child) {
+                                  return Transform.scale(
+                                    scale: value,
+                                    child: child,
+                                  );
+                                },
+                                child: Container(
+                                  width: Responsive.isMobile(context)
+                                      ? 90
+                                      : 120,
+                                  height: Responsive.isMobile(context)
+                                      ? 90
+                                      : 120,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.2),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Icon(
+                                    Icons.bloodtype,
+                                    color: Colors.white,
+                                    size: Responsive.isMobile(context)
+                                        ? 60
+                                        : 80,
+                                  ),
+                                ),
                               ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-
-                // Guest mode
-                TextButton(
-                  onPressed: () => Navigator.pushNamed(context, '/home'),
-                  child: Text(
-                    'Continue as Guest',
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: Colors.white.withValues(alpha: 0.8),
-                      decoration: TextDecoration.underline,
-                      decorationColor: Colors.white.withValues(alpha: 0.8),
-                    ),
-                  ),
-                ),
-
-                // Hidden admin setup button (for first-time setup only)
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    GestureDetector(
-                      onLongPress: () {
-                        Navigator.pushNamed(context, '/super-admin-setup');
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.all(8),
-                        child: Text(
-                          'v1.0',
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(
-                                color: Colors.white.withValues(alpha: 0.3),
+                              SizedBox(
+                                height:
+                                    Responsive.responsiveSpacing(context) * 2,
                               ),
-                        ),
+
+                              // App Title with custom styling
+                              FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  appName,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .displaySmall
+                                      ?.copyWith(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: 1.5,
+                                        fontSize: Responsive.responsiveTextSize(
+                                          context,
+                                          mobile: 32.0,
+                                          tablet: 40.0,
+                                          desktop: 48.0,
+                                        ),
+                                      ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                              SizedBox(
+                                height:
+                                    Responsive.responsiveSpacing(context) * 0.5,
+                              ),
+
+                              // Tagline with fade-in effect
+                              TweenAnimationBuilder<double>(
+                                tween: Tween(begin: 0.0, end: 1.0),
+                                duration: const Duration(milliseconds: 1000),
+                                builder: (context, value, child) {
+                                  return Opacity(opacity: value, child: child);
+                                },
+                                child: Text(
+                                  appTagline,
+                                  style: Theme.of(context).textTheme.titleMedium
+                                      ?.copyWith(
+                                        color: Colors.white.withValues(
+                                          alpha: 0.9,
+                                        ),
+                                        letterSpacing: 0.5,
+                                        fontSize: Responsive.responsiveTextSize(
+                                          context,
+                                          mobile: 16.0,
+                                          tablet: 18.0,
+                                          desktop: 20.0,
+                                        ),
+                                      ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                              SizedBox(
+                                height:
+                                    Responsive.responsiveSpacing(context) * 1.5,
+                              ),
+
+                              // Feature highlights
+                              _buildFeatureRow(
+                                context,
+                                Icons.verified_user,
+                                'Safe & Secure',
+                              ),
+                              SizedBox(
+                                height:
+                                    Responsive.responsiveSpacing(context) * 0.6,
+                              ),
+                              _buildFeatureRow(
+                                context,
+                                Icons.people,
+                                'Connect with Donors',
+                              ),
+                              SizedBox(
+                                height:
+                                    Responsive.responsiveSpacing(context) * 0.6,
+                              ),
+                              _buildFeatureRow(
+                                context,
+                                Icons.emergency,
+                                'Emergency Requests',
+                              ),
+                            ],
+                          ),
+
+                          // Bottom Section - Buttons
+                          Column(
+                            children: [
+                              SizedBox(
+                                height:
+                                    Responsive.responsiveSpacing(context) * 2,
+                              ),
+
+                              // Login Button with gradient
+                              Container(
+                                width: double.infinity,
+                                height: Responsive.responsiveButtonHeight(
+                                  context,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(
+                                    Responsive.responsiveBorderRadius(context) *
+                                        2.5,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(
+                                        alpha: 0.2,
+                                      ),
+                                      blurRadius:
+                                          Responsive.responsiveElevation(
+                                            context,
+                                          ) *
+                                          2,
+                                      offset: const Offset(0, 6),
+                                    ),
+                                  ],
+                                ),
+                                child: Material(
+                                  color: Colors.transparent,
+                                  child: InkWell(
+                                    onTap: () =>
+                                        Navigator.pushNamed(context, '/login'),
+                                    borderRadius: BorderRadius.circular(
+                                      Responsive.responsiveBorderRadius(
+                                            context,
+                                          ) *
+                                          2.5,
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        'Log In',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .titleLarge
+                                            ?.copyWith(
+                                              color: AppColors.bloodRed,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize:
+                                                  Responsive.responsiveTextSize(
+                                                    context,
+                                                    mobile: 18.0,
+                                                    tablet: 20.0,
+                                                    desktop: 22.0,
+                                                  ),
+                                            ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              SizedBox(
+                                height: Responsive.responsiveSpacing(context),
+                              ),
+
+                              // Sign Up Button with border
+                              Container(
+                                width: double.infinity,
+                                height: Responsive.responsiveButtonHeight(
+                                  context,
+                                ),
+                                decoration: BoxDecoration(
+                                  border: Border.all(
+                                    color: Colors.white,
+                                    width: 2,
+                                  ),
+                                  borderRadius: BorderRadius.circular(
+                                    Responsive.responsiveBorderRadius(context) *
+                                        2.5,
+                                  ),
+                                ),
+                                child: Material(
+                                  color: Colors.transparent,
+                                  child: InkWell(
+                                    onTap: () =>
+                                        Navigator.pushNamed(context, '/signup'),
+                                    borderRadius: BorderRadius.circular(
+                                      Responsive.responsiveBorderRadius(
+                                            context,
+                                          ) *
+                                          2.5,
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        'Sign Up',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .titleLarge
+                                            ?.copyWith(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize:
+                                                  Responsive.responsiveTextSize(
+                                                    context,
+                                                    mobile: 18.0,
+                                                    tablet: 20.0,
+                                                    desktop: 22.0,
+                                                  ),
+                                            ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              SizedBox(
+                                height: Responsive.responsiveSpacing(context),
+                              ),
+
+                              // Guest mode
+                              TextButton(
+                                onPressed: () =>
+                                    Navigator.pushNamed(context, '/home'),
+                                child: Text(
+                                  'Continue as Guest',
+                                  style: Theme.of(context).textTheme.bodyLarge
+                                      ?.copyWith(
+                                        color: Colors.white.withValues(
+                                          alpha: 0.8,
+                                        ),
+                                        decoration: TextDecoration.underline,
+                                        decorationColor: Colors.white
+                                            .withValues(alpha: 0.8),
+                                        fontSize: Responsive.responsiveTextSize(
+                                          context,
+                                        ),
+                                      ),
+                                ),
+                              ),
+
+                              // Hidden admin setup button (for first-time setup only)
+                              SizedBox(
+                                height:
+                                    Responsive.responsiveSpacing(context) * 0.3,
+                              ),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  GestureDetector(
+                                    onLongPress: () {
+                                      Navigator.pushNamed(
+                                        context,
+                                        '/super-admin-setup',
+                                      );
+                                    },
+                                    child: Container(
+                                      padding: EdgeInsets.all(
+                                        Responsive.responsiveSpacing(context) *
+                                            0.5,
+                                      ),
+                                      child: Text(
+                                        'v1.0',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall
+                                            ?.copyWith(
+                                              color: Colors.white.withValues(
+                                                alpha: 0.3,
+                                              ),
+                                              fontSize:
+                                                  Responsive.responsiveTextSize(
+                                                    context,
+                                                    mobile: 12.0,
+                                                    tablet: 13.0,
+                                                    desktop: 14.0,
+                                                  ),
+                                            ),
+                                      ),
+                                    ),
+                                  ),
+                                  SizedBox(
+                                    width: Responsive.responsiveSpacing(
+                                      context,
+                                    ),
+                                  ),
+                                  GestureDetector(
+                                    onLongPress: () {
+                                      Navigator.pushNamed(
+                                        context,
+                                        '/demo-data',
+                                      );
+                                    },
+                                    child: Container(
+                                      padding: EdgeInsets.all(
+                                        Responsive.responsiveSpacing(context) *
+                                            0.5,
+                                      ),
+                                      child: Icon(
+                                        Icons.data_object,
+                                        color: Colors.white.withValues(
+                                          alpha: 0.3,
+                                        ),
+                                        size:
+                                            Responsive.responsiveIconSize(
+                                              context,
+                                            ) *
+                                            0.9,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(width: 16),
-                    GestureDetector(
-                      onLongPress: () {
-                        Navigator.pushNamed(context, '/demo-data');
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.all(8),
-                        child: Icon(
-                          Icons.data_object,
-                          color: Colors.white.withValues(alpha: 0.3),
-                          size: 20,
-                        ),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-                const SizedBox(height: 12),
-              ],
-            ),
+              );
+            },
           ),
         ),
       ),
@@ -208,12 +393,17 @@ class WelcomeScreen extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Icon(icon, color: Colors.white.withValues(alpha: 0.9), size: 20),
-        const SizedBox(width: 8),
+        Icon(
+          icon,
+          color: Colors.white.withValues(alpha: 0.9),
+          size: Responsive.responsiveIconSize(context),
+        ),
+        SizedBox(width: Responsive.responsiveSpacing(context) * 0.5),
         Text(
           text,
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
             color: Colors.white.withValues(alpha: 0.9),
+            fontSize: Responsive.responsiveTextSize(context),
           ),
         ),
       ],

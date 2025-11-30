@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../services/admin_service.dart';
+import '../../../../services/auth_service.dart';
 import 'widgets/stat_card.dart';
 import 'widgets/control_panel_card.dart';
 import 'widgets/activity_log_list.dart';
@@ -12,6 +14,10 @@ import 'widgets/donations_list_dialog.dart';
 import 'widgets/pending_requests_dialog.dart';
 import 'widgets/activity_logs_dialog.dart';
 import 'widgets/admins_list_dialog.dart';
+import 'widgets/manage_orgs_dialog.dart';
+import 'widgets/app_settings_dialog.dart';
+import 'widgets/permissions_dialog.dart';
+import 'widgets/broadcast_alert_dialog.dart';
 
 class SuperAdminDashboard extends StatefulWidget {
   const SuperAdminDashboard({super.key});
@@ -90,12 +96,19 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
         title: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.bloodtype, color: Colors.red),
-            const SizedBox(width: 8),
-            const Text('Super Admin Dashboard'),
+            const Icon(Icons.bloodtype, color: Colors.red, size: 20),
+            const SizedBox(width: 6),
+            const Flexible(
+              child: Text(
+                'Super Admin Dashboard',
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
         actions: [
@@ -104,18 +117,67 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
             onPressed: _loadData,
             tooltip: 'Refresh Data',
           ),
-          IconButton(icon: const Icon(Icons.notifications), onPressed: () {}),
+          IconButton(
+            icon: const Icon(Icons.campaign),
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (context) => const BroadcastAlertDialog(),
+              );
+            },
+            tooltip: 'Broadcast Alert',
+          ),
           PopupMenuButton<String>(
-            onSelected: (value) {
-              // Handle profile actions
+            onSelected: (value) async {
+              switch (value) {
+                case 'Profile':
+                  _showProfileDialog(context);
+                  break;
+                case 'Settings':
+                  showDialog(
+                    context: context,
+                    builder: (context) => const AppSettingsDialog(),
+                  );
+                  break;
+                case 'Logout':
+                  _showLogoutConfirmation(context);
+                  break;
+              }
             },
             itemBuilder: (BuildContext context) {
-              return {'Profile', 'Settings', 'Logout'}.map((String choice) {
-                return PopupMenuItem<String>(
-                  value: choice,
-                  child: Text(choice),
-                );
-              }).toList();
+              return [
+                const PopupMenuItem<String>(
+                  value: 'Profile',
+                  child: Row(
+                    children: [
+                      Icon(Icons.person, size: 20),
+                      SizedBox(width: 8),
+                      Text('Profile'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem<String>(
+                  value: 'Settings',
+                  child: Row(
+                    children: [
+                      Icon(Icons.settings, size: 20),
+                      SizedBox(width: 8),
+                      Text('Settings'),
+                    ],
+                  ),
+                ),
+                const PopupMenuDivider(),
+                const PopupMenuItem<String>(
+                  value: 'Logout',
+                  child: Row(
+                    children: [
+                      Icon(Icons.logout, size: 20, color: Colors.red),
+                      SizedBox(width: 8),
+                      Text('Logout', style: TextStyle(color: Colors.red)),
+                    ],
+                  ),
+                ),
+              ];
             },
             child: const Padding(
               padding: EdgeInsets.symmetric(horizontal: 16.0),
@@ -152,22 +214,44 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
             ListTile(
               leading: const Icon(Icons.dashboard),
               title: const Text('Dashboard'),
-              onTap: () {},
+              onTap: () {
+                Navigator.pop(context); // Close drawer
+                // Already on dashboard, just refresh
+                _loadData();
+              },
             ),
             ListTile(
               leading: const Icon(Icons.admin_panel_settings),
               title: const Text('Admins'),
-              onTap: () {},
+              onTap: () {
+                Navigator.pop(context); // Close drawer
+                showDialog(
+                  context: context,
+                  builder: (context) => const AdminsListDialog(),
+                );
+              },
             ),
             ListTile(
               leading: const Icon(Icons.business),
               title: const Text('Organizations'),
-              onTap: () {},
+              onTap: () {
+                Navigator.pop(context); // Close drawer
+                showDialog(
+                  context: context,
+                  builder: (context) => const ManageOrgsDialog(),
+                );
+              },
             ),
             ListTile(
               leading: const Icon(Icons.settings),
               title: const Text('Settings'),
-              onTap: () {},
+              onTap: () {
+                Navigator.pop(context); // Close drawer
+                showDialog(
+                  context: context,
+                  builder: (context) => const AppSettingsDialog(),
+                );
+              },
             ),
           ],
         ),
@@ -206,7 +290,35 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
       children: [
         NavigationRail(
           selectedIndex: 0,
-          onDestinationSelected: (int index) {},
+          onDestinationSelected: (int index) {
+            switch (index) {
+              case 0:
+                // Dashboard - refresh data
+                _loadData();
+                break;
+              case 1:
+                // Admins
+                showDialog(
+                  context: context,
+                  builder: (context) => const AdminsListDialog(),
+                );
+                break;
+              case 2:
+                // Organizations
+                showDialog(
+                  context: context,
+                  builder: (context) => const ManageOrgsDialog(),
+                );
+                break;
+              case 3:
+                // Settings
+                showDialog(
+                  context: context,
+                  builder: (context) => const AppSettingsDialog(),
+                );
+                break;
+            }
+          },
           labelType: NavigationRailLabelType.all,
           destinations: const [
             NavigationRailDestination(
@@ -240,7 +352,7 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
-                      flex: 2,
+                      flex: 3,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -257,13 +369,16 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
                     ),
                     const SizedBox(width: 24),
                     Expanded(
-                      flex: 1,
-                      child: Column(
-                        children: [
-                          BloodGroupDemandChart(data: _bloodTypeDistribution),
-                          const SizedBox(height: 24),
-                          _buildActivityLogs(),
-                        ],
+                      flex: 2,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(minWidth: 280),
+                        child: Column(
+                          children: [
+                            BloodGroupDemandChart(data: _bloodTypeDistribution),
+                            const SizedBox(height: 24),
+                            _buildActivityLogs(),
+                          ],
+                        ),
                       ),
                     ),
                   ],
@@ -297,7 +412,7 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
           value: (_stats['totalOrgs'] ?? 0).toString(),
           icon: Icons.business,
           color: Colors.orange,
-          onTap: () {},
+          onTap: () => _showOrganizations(context),
         ),
         StatCard(
           title: 'Total Donors',
@@ -338,10 +453,154 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
     );
   }
 
+  void _showProfileDialog(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.admin_panel_settings, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Super Admin Profile'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Center(
+              child: CircleAvatar(
+                radius: 40,
+                backgroundColor: Colors.red,
+                child: Text(
+                  'SA',
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            _buildProfileRow(
+              Icons.person,
+              'Name',
+              user?.displayName ?? 'Super Admin',
+            ),
+            const SizedBox(height: 12),
+            _buildProfileRow(Icons.email, 'Email', user?.email ?? 'N/A'),
+            const SizedBox(height: 12),
+            _buildProfileRow(Icons.security, 'Role', 'Super Administrator'),
+            const SizedBox(height: 12),
+            _buildProfileRow(Icons.verified_user, 'Status', 'Active'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProfileRow(IconData icon, String label, String value) {
+    return Row(
+      children: [
+        Icon(icon, size: 20, color: Colors.grey[600]),
+        const SizedBox(width: 12),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+            ),
+            Text(
+              value,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  void _showLogoutConfirmation(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.logout, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Logout'),
+          ],
+        ),
+        content: const Text('Are you sure you want to logout?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => _performLogout(dialogContext),
+            child: const Text('Logout', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _performLogout(BuildContext dialogContext) async {
+    // Close dialog first
+    Navigator.of(dialogContext).pop();
+
+    // Show loading
+    if (mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    try {
+      await AuthService().signOut();
+
+      if (mounted) {
+        // Close loading dialog and navigate
+        Navigator.of(
+          context,
+        ).pushNamedAndRemoveUntil('/login', (route) => false);
+      }
+    } catch (e) {
+      debugPrint('Logout error: $e');
+      if (mounted) {
+        Navigator.of(context).pop(); // Close loading
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Logout failed: $e')));
+      }
+    }
+  }
+
   void _showDonorsList(BuildContext context) {
     showDialog(
       context: context,
       builder: (context) => const DonorsListDialog(),
+    );
+  }
+
+  void _showOrganizations(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => const ManageOrgsDialog(),
     );
   }
 
@@ -379,6 +638,16 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
       childAspectRatio: 1.2,
       children: [
         ControlPanelCard(
+          title: 'Broadcast Alert',
+          icon: Icons.campaign,
+          onTap: () {
+            showDialog(
+              context: context,
+              builder: (context) => const BroadcastAlertDialog(),
+            );
+          },
+        ),
+        ControlPanelCard(
           title: 'Create Admin',
           icon: Icons.person_add,
           onTap: () {
@@ -401,24 +670,32 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
         ControlPanelCard(
           title: 'Manage Orgs',
           icon: Icons.business_center,
-          onTap: () {},
+          onTap: () {
+            showDialog(
+              context: context,
+              builder: (context) => const ManageOrgsDialog(),
+            );
+          },
         ),
         ControlPanelCard(
           title: 'App Settings',
           icon: Icons.settings_applications,
-          onTap: () {},
-        ),
-        ControlPanelCard(
-          title: 'Demo Data',
-          icon: Icons.dataset,
           onTap: () {
-            Navigator.pushNamed(context, '/demo-data');
+            showDialog(
+              context: context,
+              builder: (context) => const AppSettingsDialog(),
+            );
           },
         ),
         ControlPanelCard(
           title: 'Permissions',
           icon: Icons.security,
-          onTap: () {},
+          onTap: () {
+            showDialog(
+              context: context,
+              builder: (context) => const PermissionsDialog(),
+            );
+          },
         ),
       ],
     );

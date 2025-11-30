@@ -93,7 +93,6 @@ class _PendingRequestsDialogState extends State<PendingRequestsDialog> {
                 stream: FirebaseFirestore.instance
                     .collection('bloodRequests')
                     .where('status', isEqualTo: 'pending')
-                    .orderBy('requestDate', descending: true)
                     .snapshots(),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
@@ -101,10 +100,44 @@ class _PendingRequestsDialogState extends State<PendingRequestsDialog> {
                   }
 
                   if (snapshot.hasError) {
-                    return Center(child: Text('Error: ${snapshot.error}'));
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.error_outline,
+                            size: 48,
+                            color: Colors.red,
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            'Error loading requests',
+                            style: TextStyle(color: Colors.grey[600]),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            '${snapshot.error}',
+                            style: TextStyle(fontSize: 12, color: Colors.grey),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    );
                   }
 
                   var requests = snapshot.data?.docs ?? [];
+
+                  // Sort by requestDate descending (client-side to avoid index requirement)
+                  requests.sort((a, b) {
+                    final aData = a.data() as Map<String, dynamic>;
+                    final bData = b.data() as Map<String, dynamic>;
+                    final aDate = aData['requestDate'] as Timestamp?;
+                    final bDate = bData['requestDate'] as Timestamp?;
+                    if (aDate == null && bDate == null) return 0;
+                    if (aDate == null) return 1;
+                    if (bDate == null) return -1;
+                    return bDate.compareTo(aDate);
+                  });
 
                   // Filter by urgency
                   if (_selectedUrgency != 'All') {

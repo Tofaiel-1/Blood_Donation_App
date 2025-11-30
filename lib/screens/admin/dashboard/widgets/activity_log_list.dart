@@ -93,89 +93,120 @@ class ActivityLogList extends StatelessWidget {
         children: [
           // Icon
           Container(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               color: iconColor.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(8),
             ),
-            child: Icon(icon, color: iconColor, size: 20),
+            child: Icon(icon, color: iconColor, size: 18),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 10),
 
-          // Content
+          // Content - wrapped in Expanded to prevent overflow
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Action title
-                Text(
-                  log['action'] ?? 'Unknown Action',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                  ),
+                // Action title with status badge in same row
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        log['action'] ?? 'Unknown Action',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (log['status'] != null) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _getStatusColor(
+                            log['status'],
+                          ).withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          log['status'],
+                          style: TextStyle(
+                            fontSize: 9,
+                            color: _getStatusColor(log['status']),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 3),
 
                 // Description (if available)
                 if (log['description'] != null &&
                     log['description'].toString().isNotEmpty)
                   Text(
                     log['description'],
-                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    style: TextStyle(fontSize: 11, color: Colors.grey[600]),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
 
-                const SizedBox(height: 6),
+                const SizedBox(height: 4),
 
-                // User and Time row
-                Row(
+                // User and Time row - made flexible
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
                   children: [
-                    Icon(
-                      Icons.person_outline,
-                      size: 14,
-                      color: Colors.grey[500],
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.person_outline,
+                          size: 12,
+                          color: Colors.grey[500],
+                        ),
+                        const SizedBox(width: 3),
+                        Text(
+                          log['user'] ?? 'System',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.grey[600],
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 4),
-                    Text(
-                      log['user'] ?? 'System',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.grey[600],
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Icon(Icons.access_time, size: 14, color: Colors.grey[500]),
-                    const SizedBox(width: 4),
-                    Text(
-                      log['time'] ?? 'Just now',
-                      style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.access_time,
+                          size: 12,
+                          color: Colors.grey[500],
+                        ),
+                        const SizedBox(width: 3),
+                        Text(
+                          log['time'] ?? 'Just now',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.grey[500],
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
               ],
             ),
           ),
-
-          // Status indicator (optional)
-          if (log['status'] != null)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: _getStatusColor(log['status']).withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                log['status'],
-                style: TextStyle(
-                  fontSize: 10,
-                  color: _getStatusColor(log['status']),
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
         ],
       ),
     );

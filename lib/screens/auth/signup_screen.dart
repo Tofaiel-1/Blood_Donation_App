@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../services/auth_service.dart';
 import '../../utils/validators.dart';
 import '../../utils/app_colors.dart';
+import '../../utils/responsive.dart';
 import '../../models/user.dart';
 
 class SignupScreen extends StatefulWidget {
@@ -45,19 +46,20 @@ class _SignupScreenState extends State<SignupScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [AppColors.bloodRed, Theme.of(context).colorScheme.surface],
+            colors: [AppColors.bloodRed, Colors.white],
             stops: const [0.0, 0.3],
           ),
         ),
         child: SafeArea(
           child: SingleChildScrollView(
             child: Padding(
-              padding: const EdgeInsets.all(24.0),
+              padding: Responsive.responsivePadding(context),
               child: Form(
                 key: _formKey,
                 child: Column(
@@ -65,58 +67,95 @@ class _SignupScreenState extends State<SignupScreen> {
                   children: [
                     // Back button
                     IconButton(
-                      icon: const Icon(Icons.arrow_back, color: Colors.white),
+                      icon: Icon(
+                        Icons.arrow_back,
+                        color: Colors.white,
+                        size: Responsive.responsiveIconSize(context),
+                      ),
                       onPressed: () => Navigator.pop(context),
                     ),
-                    const SizedBox(height: 20),
+                    SizedBox(height: Responsive.responsiveSpacing(context)),
 
                     // Logo and title
                     Center(
                       child: Column(
                         children: [
                           Container(
-                            width: 80,
-                            height: 80,
+                            width: Responsive.responsiveTextSize(
+                              context,
+                              mobile: 80,
+                              tablet: 100,
+                              desktop: 120,
+                            ),
+                            height: Responsive.responsiveTextSize(
+                              context,
+                              mobile: 80,
+                              tablet: 100,
+                              desktop: 120,
+                            ),
                             decoration: BoxDecoration(
                               color: Colors.white.withValues(alpha: 0.2),
                               shape: BoxShape.circle,
                             ),
-                            child: const Icon(
+                            child: Icon(
                               Icons.bloodtype,
                               color: Colors.white,
-                              size: 50,
+                              size: Responsive.responsiveTextSize(
+                                context,
+                                mobile: 50,
+                                tablet: 60,
+                                desktop: 70,
+                              ),
                             ),
                           ),
-                          const SizedBox(height: 20),
+                          SizedBox(
+                            height: Responsive.responsiveSpacing(context),
+                          ),
                           Text(
                             'Create Account',
                             style: Theme.of(context).textTheme.headlineMedium
                                 ?.copyWith(
                                   color: Colors.white,
                                   fontWeight: FontWeight.bold,
+                                  fontSize: Responsive.responsiveTextSize(
+                                    context,
+                                    mobile: 28,
+                                    tablet: 32,
+                                    desktop: 36,
+                                  ),
                                 ),
                           ),
-                          const SizedBox(height: 8),
+                          SizedBox(
+                            height: Responsive.responsiveSpacing(context) * 0.5,
+                          ),
                           Text(
                             'Join us and start saving lives',
                             style: Theme.of(context).textTheme.bodyLarge
                                 ?.copyWith(
                                   color: Colors.white.withValues(alpha: 0.9),
+                                  fontSize: Responsive.responsiveTextSize(
+                                    context,
+                                    mobile: 14,
+                                    tablet: 16,
+                                    desktop: 18,
+                                  ),
                                 ),
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 40),
+                    SizedBox(height: Responsive.responsiveSpacing(context) * 2),
 
                     // Form fields in card
                     Card(
-                      elevation: 4,
+                      elevation: Responsive.responsiveElevation(context),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
+                        borderRadius: BorderRadius.circular(
+                          Responsive.responsiveBorderRadius(context) * 1.5,
+                        ),
                       ),
                       child: Padding(
-                        padding: const EdgeInsets.all(24.0),
+                        padding: Responsive.responsiveCardPadding(context),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -127,7 +166,9 @@ class _SignupScreenState extends State<SignupScreen> {
                               icon: Icons.person_outlined,
                               validator: Validators.validateName,
                             ),
-                            const SizedBox(height: 16),
+                            SizedBox(
+                              height: Responsive.responsiveSpacing(context),
+                            ),
 
                             _buildTextField(
                               controller: _emailController,
@@ -137,7 +178,9 @@ class _SignupScreenState extends State<SignupScreen> {
                               keyboardType: TextInputType.emailAddress,
                               validator: Validators.validateEmail,
                             ),
-                            const SizedBox(height: 16),
+                            SizedBox(
+                              height: Responsive.responsiveSpacing(context),
+                            ),
 
                             _buildTextField(
                               controller: _phoneController,
@@ -147,7 +190,9 @@ class _SignupScreenState extends State<SignupScreen> {
                               keyboardType: TextInputType.phone,
                               validator: Validators.validatePhone,
                             ),
-                            const SizedBox(height: 16),
+                            SizedBox(
+                              height: Responsive.responsiveSpacing(context),
+                            ),
 
                             Row(
                               children: [
@@ -172,7 +217,9 @@ class _SignupScreenState extends State<SignupScreen> {
                                     },
                                   ),
                                 ),
-                                const SizedBox(width: 16),
+                                SizedBox(
+                                  width: Responsive.responsiveSpacing(context),
+                                ),
                                 Expanded(
                                   child: Column(
                                     crossAxisAlignment:
@@ -187,9 +234,22 @@ class _SignupScreenState extends State<SignupScreen> {
                                               color: Theme.of(
                                                 context,
                                               ).colorScheme.onSurface,
+                                              fontSize:
+                                                  Responsive.responsiveTextSize(
+                                                    context,
+                                                    mobile: 14,
+                                                    tablet: 15,
+                                                    desktop: 16,
+                                                  ),
                                             ),
                                       ),
-                                      const SizedBox(height: 8),
+                                      SizedBox(
+                                        height:
+                                            Responsive.responsiveSpacing(
+                                              context,
+                                            ) *
+                                            0.5,
+                                      ),
                                       DropdownButtonFormField<String>(
                                         value: _selectedGender,
                                         decoration: InputDecoration(
@@ -199,6 +259,9 @@ class _SignupScreenState extends State<SignupScreen> {
                                             color: Theme.of(
                                               context,
                                             ).colorScheme.primary,
+                                            size: Responsive.responsiveIconSize(
+                                              context,
+                                            ),
                                           ),
                                           filled: true,
                                           fillColor: Theme.of(context)
@@ -207,7 +270,9 @@ class _SignupScreenState extends State<SignupScreen> {
                                               .withValues(alpha: 0.05),
                                           border: OutlineInputBorder(
                                             borderRadius: BorderRadius.circular(
-                                              12,
+                                              Responsive.responsiveBorderRadius(
+                                                context,
+                                              ),
                                             ),
                                             borderSide: BorderSide.none,
                                           ),
@@ -230,7 +295,9 @@ class _SignupScreenState extends State<SignupScreen> {
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 16),
+                            SizedBox(
+                              height: Responsive.responsiveSpacing(context),
+                            ),
 
                             _buildTextField(
                               controller: _addressController,
@@ -240,7 +307,9 @@ class _SignupScreenState extends State<SignupScreen> {
                               validator: (v) =>
                                   v == null || v.isEmpty ? 'Required' : null,
                             ),
-                            const SizedBox(height: 16),
+                            SizedBox(
+                              height: Responsive.responsiveSpacing(context),
+                            ),
 
                             // Blood Type Dropdown
                             Text(
@@ -250,9 +319,18 @@ class _SignupScreenState extends State<SignupScreen> {
                                     color: Theme.of(
                                       context,
                                     ).colorScheme.onSurface,
+                                    fontSize: Responsive.responsiveTextSize(
+                                      context,
+                                      mobile: 14,
+                                      tablet: 15,
+                                      desktop: 16,
+                                    ),
                                   ),
                             ),
-                            const SizedBox(height: 8),
+                            SizedBox(
+                              height:
+                                  Responsive.responsiveSpacing(context) * 0.5,
+                            ),
                             DropdownButtonFormField<String>(
                               value: _selectedBloodType,
                               decoration: InputDecoration(
@@ -260,24 +338,31 @@ class _SignupScreenState extends State<SignupScreen> {
                                 prefixIcon: Icon(
                                   Icons.opacity,
                                   color: Theme.of(context).colorScheme.primary,
+                                  size: Responsive.responsiveIconSize(context),
                                 ),
                                 filled: true,
                                 fillColor: Theme.of(
                                   context,
                                 ).colorScheme.primary.withValues(alpha: 0.05),
                                 border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
+                                  borderRadius: BorderRadius.circular(
+                                    Responsive.responsiveBorderRadius(context),
+                                  ),
                                   borderSide: BorderSide.none,
                                 ),
                                 enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
+                                  borderRadius: BorderRadius.circular(
+                                    Responsive.responsiveBorderRadius(context),
+                                  ),
                                   borderSide: BorderSide(
                                     color: Theme.of(context).colorScheme.outline
                                         .withValues(alpha: 0.2),
                                   ),
                                 ),
                                 focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
+                                  borderRadius: BorderRadius.circular(
+                                    Responsive.responsiveBorderRadius(context),
+                                  ),
                                   borderSide: BorderSide(
                                     color: Theme.of(
                                       context,
@@ -311,7 +396,9 @@ class _SignupScreenState extends State<SignupScreen> {
                               },
                               validator: Validators.validateBloodType,
                             ),
-                            const SizedBox(height: 16),
+                            SizedBox(
+                              height: Responsive.responsiveSpacing(context),
+                            ),
 
                             _buildTextField(
                               controller: _passwordController,
@@ -326,6 +413,7 @@ class _SignupScreenState extends State<SignupScreen> {
                                       ? Icons.visibility_off
                                       : Icons.visibility,
                                   color: Theme.of(context).colorScheme.primary,
+                                  size: Responsive.responsiveIconSize(context),
                                 ),
                                 onPressed: () {
                                   setState(() {
@@ -334,7 +422,9 @@ class _SignupScreenState extends State<SignupScreen> {
                                 },
                               ),
                             ),
-                            const SizedBox(height: 16),
+                            SizedBox(
+                              height: Responsive.responsiveSpacing(context),
+                            ),
 
                             _buildTextField(
                               controller: _confirmPasswordController,
@@ -354,6 +444,7 @@ class _SignupScreenState extends State<SignupScreen> {
                                       ? Icons.visibility_off
                                       : Icons.visibility,
                                   color: Theme.of(context).colorScheme.primary,
+                                  size: Responsive.responsiveIconSize(context),
                                 ),
                                 onPressed: () {
                                   setState(() {
@@ -363,7 +454,10 @@ class _SignupScreenState extends State<SignupScreen> {
                                 },
                               ),
                             ),
-                            const SizedBox(height: 20),
+                            SizedBox(
+                              height:
+                                  Responsive.responsiveSpacing(context) * 1.5,
+                            ),
 
                             // Terms checkbox
                             Row(
@@ -385,12 +479,27 @@ class _SignupScreenState extends State<SignupScreen> {
                                       });
                                     },
                                     child: Padding(
-                                      padding: const EdgeInsets.only(top: 12),
+                                      padding: EdgeInsets.only(
+                                        top:
+                                            Responsive.responsiveSpacing(
+                                              context,
+                                            ) *
+                                            0.75,
+                                      ),
                                       child: Text(
                                         'I agree to the Terms of Service and Privacy Policy',
-                                        style: Theme.of(
-                                          context,
-                                        ).textTheme.bodySmall,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall
+                                            ?.copyWith(
+                                              fontSize:
+                                                  Responsive.responsiveTextSize(
+                                                    context,
+                                                    mobile: 12,
+                                                    tablet: 13,
+                                                    desktop: 14,
+                                                  ),
+                                            ),
                                       ),
                                     ),
                                   ),
@@ -401,53 +510,74 @@ class _SignupScreenState extends State<SignupScreen> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 30),
+                    SizedBox(height: Responsive.responsiveSpacing(context) * 2),
 
                     // Sign Up Button
-                    Container(
-                      width: double.infinity,
-                      height: 56,
-                      decoration: BoxDecoration(
-                        gradient: AppColors.primaryGradient,
-                        borderRadius: BorderRadius.circular(30),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.bloodRed.withValues(alpha: 0.4),
-                            blurRadius: 12,
-                            offset: const Offset(0, 6),
-                          ),
-                        ],
+                    ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxWidth: Responsive.responsiveMaxWidth(context),
                       ),
-                      child: Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: _isSubmitting ? null : _onSignupPressed,
-                          borderRadius: BorderRadius.circular(30),
-                          child: Center(
-                            child: _isSubmitting
-                                ? const SizedBox(
-                                    width: 24,
-                                    height: 24,
-                                    child: CircularProgressIndicator(
-                                      color: Colors.white,
-                                      strokeWidth: 2.5,
+                      child: Container(
+                        width: double.infinity,
+                        height: Responsive.responsiveButtonHeight(context),
+                        decoration: BoxDecoration(
+                          gradient: AppColors.primaryGradient,
+                          borderRadius: BorderRadius.circular(
+                            Responsive.responsiveBorderRadius(context) * 2,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.bloodRed.withValues(alpha: 0.4),
+                              blurRadius:
+                                  Responsive.responsiveElevation(context) * 3,
+                              offset: const Offset(0, 6),
+                            ),
+                          ],
+                        ),
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: _isSubmitting ? null : _onSignupPressed,
+                            borderRadius: BorderRadius.circular(
+                              Responsive.responsiveBorderRadius(context) * 2,
+                            ),
+                            child: Center(
+                              child: _isSubmitting
+                                  ? SizedBox(
+                                      width: Responsive.responsiveIconSize(
+                                        context,
+                                      ),
+                                      height: Responsive.responsiveIconSize(
+                                        context,
+                                      ),
+                                      child: const CircularProgressIndicator(
+                                        color: Colors.white,
+                                        strokeWidth: 2.5,
+                                      ),
+                                    )
+                                  : Text(
+                                      'Sign Up',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleLarge
+                                          ?.copyWith(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize:
+                                                Responsive.responsiveTextSize(
+                                                  context,
+                                                  mobile: 16,
+                                                  tablet: 18,
+                                                  desktop: 20,
+                                                ),
+                                          ),
                                     ),
-                                  )
-                                : Text(
-                                    'Sign Up',
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .titleLarge
-                                        ?.copyWith(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                  ),
+                            ),
                           ),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 30),
+                    SizedBox(height: Responsive.responsiveSpacing(context) * 2),
 
                     // Login Link
                     Row(
@@ -455,7 +585,15 @@ class _SignupScreenState extends State<SignupScreen> {
                       children: [
                         Text(
                           "Already have an account?",
-                          style: Theme.of(context).textTheme.bodyLarge,
+                          style: Theme.of(context).textTheme.bodyLarge
+                              ?.copyWith(
+                                fontSize: Responsive.responsiveTextSize(
+                                  context,
+                                  mobile: 14,
+                                  tablet: 15,
+                                  desktop: 16,
+                                ),
+                              ),
                         ),
                         TextButton(
                           onPressed: () {
@@ -466,6 +604,12 @@ class _SignupScreenState extends State<SignupScreen> {
                             style: TextStyle(
                               color: Theme.of(context).colorScheme.primary,
                               fontWeight: FontWeight.bold,
+                              fontSize: Responsive.responsiveTextSize(
+                                context,
+                                mobile: 14,
+                                tablet: 15,
+                                desktop: 16,
+                              ),
                             ),
                           ),
                         ),
@@ -498,9 +642,15 @@ class _SignupScreenState extends State<SignupScreen> {
           label,
           style: Theme.of(context).textTheme.labelLarge?.copyWith(
             color: Theme.of(context).colorScheme.onSurface,
+            fontSize: Responsive.responsiveTextSize(
+              context,
+              mobile: 14,
+              tablet: 15,
+              desktop: 16,
+            ),
           ),
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: Responsive.responsiveSpacing(context) * 0.5),
         TextFormField(
           controller: controller,
           obscureText: obscureText,
@@ -510,6 +660,7 @@ class _SignupScreenState extends State<SignupScreen> {
             prefixIcon: Icon(
               icon,
               color: Theme.of(context).colorScheme.primary,
+              size: Responsive.responsiveIconSize(context),
             ),
             suffixIcon: suffixIcon,
             filled: true,
@@ -517,11 +668,15 @@ class _SignupScreenState extends State<SignupScreen> {
               context,
             ).colorScheme.primary.withValues(alpha: 0.05),
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(
+                Responsive.responsiveBorderRadius(context),
+              ),
               borderSide: BorderSide.none,
             ),
             enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(
+                Responsive.responsiveBorderRadius(context),
+              ),
               borderSide: BorderSide(
                 color: Theme.of(
                   context,
@@ -529,7 +684,9 @@ class _SignupScreenState extends State<SignupScreen> {
               ),
             ),
             focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(
+                Responsive.responsiveBorderRadius(context),
+              ),
               borderSide: BorderSide(
                 color: Theme.of(context).colorScheme.primary,
                 width: 2,
@@ -558,7 +715,9 @@ class _SignupScreenState extends State<SignupScreen> {
           backgroundColor: AppColors.warningAmber,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(
+              Responsive.responsiveBorderRadius(context),
+            ),
           ),
         ),
       );
@@ -598,7 +757,9 @@ class _SignupScreenState extends State<SignupScreen> {
             backgroundColor: AppColors.warningAmber,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(
+                Responsive.responsiveBorderRadius(context),
+              ),
             ),
           ),
         );
@@ -683,7 +844,9 @@ class _SignupScreenState extends State<SignupScreen> {
           backgroundColor: AppColors.urgentRed,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(
+              Responsive.responsiveBorderRadius(context),
+            ),
           ),
         ),
       );
@@ -702,7 +865,9 @@ class _SignupScreenState extends State<SignupScreen> {
           backgroundColor: AppColors.urgentRed,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(
+              Responsive.responsiveBorderRadius(context),
+            ),
           ),
         ),
       );

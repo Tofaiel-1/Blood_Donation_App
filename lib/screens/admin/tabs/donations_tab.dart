@@ -132,6 +132,10 @@ class _DonationCard extends StatelessWidget {
     final status = data['status'] ?? 'completed';
     final donationDate =
         (data['donationDate'] as Timestamp?)?.toDate() ?? DateTime.now();
+    final isManualEntry = data['isManualEntry'] ?? false;
+    final hasRecipient =
+        data['recipientPatientName'] != null &&
+        (data['recipientPatientName'] as String).isNotEmpty;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -147,14 +151,63 @@ class _DonationCard extends StatelessWidget {
             ),
           ),
         ),
-        title: Text(
-          donorName,
-          style: const TextStyle(fontWeight: FontWeight.bold),
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                donorName,
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+            if (isManualEntry)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.blue[100],
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.edit, size: 12, color: Colors.blue[700]),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Manual',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.blue[700],
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
         ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(location),
+            if (hasRecipient) ...[
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Icon(Icons.person, size: 14, color: Colors.grey[600]),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      'Recipient: ${data['recipientPatientName']}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[700],
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            const SizedBox(height: 4),
             Text(
               _formatDate(donationDate),
               style: TextStyle(fontSize: 12, color: Colors.grey[600]),

@@ -7,6 +7,12 @@ class Donation {
   final String location;
   final String status; // 'scheduled', 'completed', 'cancelled'
   final String? notes;
+  // Recipient information (who received the blood)
+  final String? recipientRequestId;
+  final String? recipientPatientName;
+  final String? recipientHospital;
+  final String? recipientBloodType;
+  final String? recipientContactPhone;
 
   Donation({
     required this.id,
@@ -17,7 +23,16 @@ class Donation {
     required this.location,
     required this.status,
     this.notes,
+    this.recipientRequestId,
+    this.recipientPatientName,
+    this.recipientHospital,
+    this.recipientBloodType,
+    this.recipientContactPhone,
   });
+
+  // Check if this donation has a recipient
+  bool get hasRecipient =>
+      recipientPatientName != null && recipientPatientName!.isNotEmpty;
 
   factory Donation.fromMap(Map<String, dynamic> map) {
     return Donation(
@@ -29,6 +44,11 @@ class Donation {
       location: map['location'],
       status: map['status'],
       notes: map['notes'],
+      recipientRequestId: map['recipientRequestId'],
+      recipientPatientName: map['recipientPatientName'],
+      recipientHospital: map['recipientHospital'],
+      recipientBloodType: map['recipientBloodType'],
+      recipientContactPhone: map['recipientContactPhone'],
     );
   }
 
@@ -42,6 +62,11 @@ class Donation {
       'location': location,
       'status': status,
       'notes': notes,
+      'recipientRequestId': recipientRequestId,
+      'recipientPatientName': recipientPatientName,
+      'recipientHospital': recipientHospital,
+      'recipientBloodType': recipientBloodType,
+      'recipientContactPhone': recipientContactPhone,
     };
   }
 }

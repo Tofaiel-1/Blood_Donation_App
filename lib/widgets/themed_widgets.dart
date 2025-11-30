@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_text_styles.dart';
+import '../utils/responsive.dart';
 
 /// Reusable themed widgets for the Blood Donation App
 /// These widgets maintain consistent styling across the app
@@ -23,17 +24,25 @@ class EmergencyCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      elevation: Responsive.responsiveElevation(context),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(
+          Responsive.responsiveBorderRadius(context),
+        ),
+      ),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(
+          Responsive.responsiveBorderRadius(context),
+        ),
         child: Container(
           decoration: BoxDecoration(
             gradient: AppColors.primaryGradient,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(
+              Responsive.responsiveBorderRadius(context),
+            ),
           ),
-          padding: const EdgeInsets.all(20),
+          padding: Responsive.responsiveCardPadding(context),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -41,59 +50,83 @@ class EmergencyCard extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: Responsive.responsiveSpacing(context),
+                      vertical: Responsive.responsiveSpacing(context) * 0.3,
                     ),
                     decoration: BoxDecoration(
                       color: Colors.white.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(
+                        Responsive.responsiveBorderRadius(context) + 4,
+                      ),
                     ),
                     child: Text(
                       urgency,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w700,
-                        fontSize: 12,
+                        fontSize: Responsive.responsiveTextSize(
+                          context,
+                          mobile: 11.0,
+                          tablet: 12.0,
+                          desktop: 13.0,
+                        ),
                       ),
                     ),
                   ),
                   Icon(
                     Icons.emergency,
                     color: Colors.white.withValues(alpha: 0.9),
-                    size: 28,
+                    size: Responsive.responsiveIconSize(context) + 4,
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
+              SizedBox(height: Responsive.responsiveSpacing(context)),
               Text(
                 bloodType,
-                style: AppTextStyles.bloodType(
-                  context,
-                ).copyWith(color: Colors.white, fontSize: 48),
+                style: AppTextStyles.bloodType(context).copyWith(
+                  color: Colors.white,
+                  fontSize: Responsive.responsiveTextSize(
+                    context,
+                    mobile: 36.0,
+                    tablet: 42.0,
+                    desktop: 48.0,
+                  ),
+                ),
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: Responsive.responsiveSpacing(context) * 0.5),
               Text(
                 hospital,
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
                   color: Colors.white.withValues(alpha: 0.95),
                   fontWeight: FontWeight.w600,
+                  fontSize: Responsive.responsiveTextSize(
+                    context,
+                    mobile: 14.0,
+                    tablet: 16.0,
+                    desktop: 18.0,
+                  ),
                 ),
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: Responsive.responsiveSpacing(context)),
               Row(
                 children: [
                   Icon(
                     Icons.access_time,
                     color: Colors.white.withValues(alpha: 0.8),
-                    size: 16,
+                    size: Responsive.responsiveIconSize(context) - 4,
                   ),
-                  const SizedBox(width: 6),
+                  SizedBox(width: Responsive.responsiveSpacing(context) * 0.3),
                   Text(
                     'Posted just now',
                     style: TextStyle(
                       color: Colors.white.withValues(alpha: 0.8),
-                      fontSize: 12,
+                      fontSize: Responsive.responsiveTextSize(
+                        context,
+                        mobile: 11.0,
+                        tablet: 12.0,
+                        desktop: 13.0,
+                      ),
                     ),
                   ),
                 ],
@@ -229,27 +262,36 @@ class StatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cardColor = color ?? Theme.of(context).colorScheme.primary;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isSmallScreen = screenWidth < 360;
 
     return Card(
       elevation: 2,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(isSmallScreen ? 12 : 16),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 32, color: cardColor),
-            const SizedBox(height: 12),
-            Text(
-              value,
-              style: AppTextStyles.statsNumber(
-                context,
-              ).copyWith(fontSize: 36, color: cardColor),
+            Icon(icon, size: isSmallScreen ? 24 : 32, color: cardColor),
+            SizedBox(height: isSmallScreen ? 8 : 12),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                value,
+                style: AppTextStyles.statsNumber(
+                  context,
+                ).copyWith(fontSize: isSmallScreen ? 28 : 36, color: cardColor),
+              ),
             ),
             const SizedBox(height: 4),
             Text(
               label,
-              style: Theme.of(context).textTheme.bodySmall,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                fontSize: isSmallScreen ? 10 : 12,
+              ),
               textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
           ],
         ),
@@ -397,6 +439,10 @@ class DonationHistoryTile extends StatelessWidget {
   final String location;
   final DateTime date;
   final bool isCompleted;
+  // Recipient information
+  final String? recipientPatientName;
+  final String? recipientHospital;
+  final String? recipientBloodType;
 
   const DonationHistoryTile({
     super.key,
@@ -404,25 +450,111 @@ class DonationHistoryTile extends StatelessWidget {
     required this.location,
     required this.date,
     this.isCompleted = true,
+    this.recipientPatientName,
+    this.recipientHospital,
+    this.recipientBloodType,
   });
+
+  bool get hasRecipient =>
+      recipientPatientName != null && recipientPatientName!.isNotEmpty;
 
   @override
   Widget build(BuildContext context) {
     return Card(
-      child: ListTile(
-        leading: BloodTypeBadge(
-          bloodType: bloodType,
-          size: 50,
-          isPrimary: isCompleted,
-        ),
-        title: Text(location, style: Theme.of(context).textTheme.titleMedium),
-        subtitle: Text(
-          _formatDate(date),
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
-        trailing: StatusChip(
-          label: isCompleted ? 'Completed' : 'Pending',
-          type: isCompleted ? StatusType.available : StatusType.pending,
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                BloodTypeBadge(
+                  bloodType: bloodType,
+                  size: 50,
+                  isPrimary: isCompleted,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        location,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      Text(
+                        _formatDate(date),
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+                StatusChip(
+                  label: isCompleted ? 'Completed' : 'Pending',
+                  type: isCompleted ? StatusType.available : StatusType.pending,
+                ),
+              ],
+            ),
+            // Show recipient info if available
+            if (hasRecipient) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppColors.bloodRed.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: AppColors.bloodRed.withValues(alpha: 0.2),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.person,
+                          size: 16,
+                          color: AppColors.bloodRed,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'রোগী: $recipientPatientName',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                            color: AppColors.bloodRed,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (recipientHospital != null) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.local_hospital,
+                            size: 14,
+                            color: Colors.grey[600],
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              recipientHospital!,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[700],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ],
         ),
       ),
     );

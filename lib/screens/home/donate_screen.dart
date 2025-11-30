@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:firebase_auth/firebase_auth.dart' as fb_auth;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/donation.dart';
+import '../../models/blood_request.dart';
 import '../../services/location_service.dart';
 import '../../utils/app_colors.dart';
 
@@ -100,6 +101,12 @@ class _DonateScreenState extends State<DonateScreen>
           location: data['location'] ?? '',
           status: data['status'] ?? '',
           notes: data['notes'],
+          // Recipient information
+          recipientRequestId: data['recipientRequestId'],
+          recipientPatientName: data['recipientPatientName'],
+          recipientHospital: data['recipientHospital'],
+          recipientBloodType: data['recipientBloodType'],
+          recipientContactPhone: data['recipientContactPhone'],
         );
       }).toList();
     } catch (e) {
@@ -179,11 +186,11 @@ class _DonateScreenState extends State<DonateScreen>
           .difference(lastDonation)
           .inDays;
 
-      // Minimum 56 days between donations
-      if (daysSinceLastDonation < 56) {
+      // Minimum 120 days between donations (4 months)
+      if (daysSinceLastDonation < 120) {
         setState(() {
           canDonate = false;
-          nextEligibleDate = lastDonation.add(Duration(days: 56));
+          nextEligibleDate = lastDonation.add(Duration(days: 120));
         });
       }
     }
@@ -193,6 +200,7 @@ class _DonateScreenState extends State<DonateScreen>
   Widget build(BuildContext context) {
     if (_isLoadingData) {
       return Scaffold(
+        backgroundColor: Colors.white,
         appBar: AppBar(
           title: const Text(
             'Donate Blood',
@@ -206,6 +214,7 @@ class _DonateScreenState extends State<DonateScreen>
     }
 
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text(
           'Donate Blood',
@@ -237,29 +246,129 @@ class _DonateScreenState extends State<DonateScreen>
           _buildCentersTab(),
         ],
       ),
-      floatingActionButton: _selectedTabIndex == 3
-          ? FloatingActionButton.extended(
-              onPressed: _getUserLocation,
-              icon: _isLoadingLocation
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        color: Colors.white,
-                        strokeWidth: 2,
-                      ),
-                    )
-                  : const Icon(Icons.my_location),
-              label: Text(
-                _currentPosition != null
-                    ? 'Location Updated'
-                    : 'Get My Location',
-              ),
-              backgroundColor: AppColors.bloodRed,
-              foregroundColor: Colors.white,
-            )
-          : null,
+      floatingActionButton: _buildFloatingActionButton(),
     );
+  }
+
+  Widget? _buildFloatingActionButton() {
+    // For Centers tab - show location button
+    if (_selectedTabIndex == 3) {
+      return FloatingActionButton.extended(
+        onPressed: _getUserLocation,
+        icon: _isLoadingLocation
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  color: Colors.white,
+                  strokeWidth: 2,
+                ),
+              )
+            : const Icon(Icons.my_location),
+        label: Text(
+          _currentPosition != null ? 'Location Updated' : 'Get My Location',
+        ),
+        backgroundColor: AppColors.bloodRed,
+        foregroundColor: Colors.white,
+      );
+    }
+
+    // For History tab - show manual donation add button
+    if (_selectedTabIndex == 2) {
+      return FloatingActionButton.extended(
+        onPressed: _showManualDonationDialog,
+        icon: const Icon(Icons.add),
+        label: const Text('Add Donation'),
+        backgroundColor: AppColors.bloodRed,
+        foregroundColor: Colors.white,
+      );
+    }
+
+    return null;
+  }
+
+  /// Show dialog to manually add a past donation
+  Future<void> _showManualDonationDialog() async {
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => const _ManualDonationDialog(),
+    );
+
+    if (result != null && result['confirmed'] == true) {
+      await _saveManualDonation(result);
+    }
+  }
+
+  /// Save manual donation to Firebase
+  Future<void> _saveManualDonation(Map<String, dynamic> data) async {
+    try {
+      final user = fb_auth.FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+
+      // Get user profile
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+
+      final userData = userDoc.data() ?? {};
+
+      // Create donation record
+      final donationData = {
+        'donorId': user.uid,
+        'donorName': userData['name'] ?? 'User',
+        'bloodType': userData['bloodType'] ?? 'Unknown',
+        'donationDate': Timestamp.fromDate(data['date'] as DateTime),
+        'location': data['location'] as String,
+        'status': 'completed',
+        'notes': data['notes'] as String? ?? 'Added manually',
+        'createdAt': FieldValue.serverTimestamp(),
+        'isManualEntry': true, // Mark as manual entry
+      };
+
+      // Add to Firebase
+      await FirebaseFirestore.instance
+          .collection('donations')
+          .add(donationData);
+
+      // Update user's donation count
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .update({
+            'totalDonations': FieldValue.increment(1),
+            'lastDonationDate': Timestamp.fromDate(data['date'] as DateTime),
+          });
+
+      // Reload history
+      await _loadDonationHistory();
+      _checkEligibility();
+
+      if (mounted) {
+        setState(() {});
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.white),
+                SizedBox(width: 12),
+                Text('Donation record added successfully!'),
+              ],
+            ),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error adding donation: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   Widget _buildCompleteDonationTab() {
@@ -431,45 +540,48 @@ class _DonateScreenState extends State<DonateScreen>
   }
 
   Future<void> _completeDonation(DonationCenter center) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Confirm Donation'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Did you donate blood at ${center.name}?'),
-            const SizedBox(height: 12),
-            const Text(
-              'This will be added to your donation history.',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
-            ),
-          ],
+    // First check if user is eligible to donate (120 days rule)
+    if (!canDonate) {
+      final daysRemaining =
+          nextEligibleDate?.difference(DateTime.now()).inDays ?? 0;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.warning, color: Colors.white),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'আপনি এখনও রক্তদান করতে পারবেন না। আরও $daysRemaining দিন অপেক্ষা করুন।',
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.orange,
+          duration: const Duration(seconds: 4),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Yes, Confirm'),
-          ),
-        ],
-      ),
+      );
+      return;
+    }
+
+    // Show dialog to select recipient (optional)
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => _RecipientSelectionDialog(center: center),
     );
 
-    if (confirmed == true) {
-      await _saveDonation(center);
+    if (result != null && result['confirmed'] == true) {
+      await _saveDonation(
+        center,
+        recipient: result['recipient'] as BloodRequest?,
+      );
     }
   }
 
-  Future<void> _saveDonation(DonationCenter center) async {
+  Future<void> _saveDonation(
+    DonationCenter center, {
+    BloodRequest? recipient,
+  }) async {
     try {
       final user = fb_auth.FirebaseAuth.instance.currentUser;
       if (user == null) {
@@ -484,8 +596,8 @@ class _DonateScreenState extends State<DonateScreen>
 
       final userData = userDoc.data() ?? {};
 
-      // Add donation to Firestore
-      await FirebaseFirestore.instance.collection('donations').add({
+      // Create donation data
+      final donationData = {
         'donorId': user.uid,
         'donorName': userData['name'] ?? 'User',
         'bloodType': userData['bloodType'] ?? 'Unknown',
@@ -494,7 +606,21 @@ class _DonateScreenState extends State<DonateScreen>
         'status': 'completed',
         'notes': 'Completed via app',
         'createdAt': FieldValue.serverTimestamp(),
-      });
+      };
+
+      // Add recipient info if available
+      if (recipient != null) {
+        donationData['recipientRequestId'] = recipient.id;
+        donationData['recipientPatientName'] = recipient.patientName;
+        donationData['recipientHospital'] = recipient.hospitalName;
+        donationData['recipientBloodType'] = recipient.bloodType;
+        donationData['recipientContactPhone'] = recipient.contactPhone;
+      }
+
+      // Add donation to Firestore
+      await FirebaseFirestore.instance
+          .collection('donations')
+          .add(donationData);
 
       // Update user's total donation count in Firestore
       await FirebaseFirestore.instance
@@ -504,6 +630,19 @@ class _DonateScreenState extends State<DonateScreen>
             'totalDonations': FieldValue.increment(1),
             'lastDonationDate': Timestamp.fromDate(DateTime.now()),
           });
+
+      // If there was a recipient, update the blood request status
+      if (recipient != null) {
+        await FirebaseFirestore.instance
+            .collection('bloodRequests')
+            .doc(recipient.id)
+            .update({
+              'status': 'fulfilled',
+              'fulfilledDate': Timestamp.fromDate(DateTime.now()),
+              'fulfilledByDonorId': user.uid,
+              'fulfilledByDonorName': userData['name'] ?? 'User',
+            });
+      }
 
       // Reload donation history
       await _loadDonationHistory();
@@ -531,7 +670,9 @@ class _DonateScreenState extends State<DonateScreen>
                         ),
                       ),
                       Text(
-                        'Total donations: ${donationHistory.where((d) => d.status == "completed").length}',
+                        recipient != null
+                            ? 'Donated to: ${recipient.patientName} at ${recipient.hospitalName}'
+                            : 'Total donations: ${donationHistory.where((d) => d.status == "completed").length}',
                       ),
                     ],
                   ),
@@ -750,7 +891,7 @@ class _DonateScreenState extends State<DonateScreen>
           if (!canDonate) ...[
             SizedBox(height: 16),
             Text(
-              'You must wait at least 56 days between blood donations for your safety.',
+              'You must wait at least 120 days (4 months) between blood donations for your safety.',
               style: TextStyle(
                 color: Colors.grey[600],
                 fontSize: 14,
@@ -947,7 +1088,81 @@ class _DonateScreenState extends State<DonateScreen>
                 ),
               ],
             ),
-            if (donation.notes != null) ...[
+            // Show recipient information if available
+            if (donation.hasRecipient) ...[
+              SizedBox(height: 12),
+              Container(
+                padding: EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.bloodRed.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: AppColors.bloodRed.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.person, size: 16, color: AppColors.bloodRed),
+                        SizedBox(width: 6),
+                        Text(
+                          'রোগী: ${donation.recipientPatientName}',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.bloodRed,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (donation.recipientHospital != null) ...[
+                      SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.local_hospital,
+                            size: 14,
+                            color: Colors.grey[600],
+                          ),
+                          SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              donation.recipientHospital!,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.grey[700],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    if (donation.recipientBloodType != null) ...[
+                      SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.bloodtype,
+                            size: 14,
+                            color: Colors.grey[600],
+                          ),
+                          SizedBox(width: 6),
+                          Text(
+                            'Blood Type: ${donation.recipientBloodType}',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey[700],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+            if (donation.notes != null && !donation.hasRecipient) ...[
               SizedBox(height: 8),
               Text(
                 donation.notes!,
@@ -1330,5 +1545,445 @@ class _DonateScreenState extends State<DonateScreen>
         ).showSnackBar(SnackBar(content: Text('Error opening maps: $e')));
       }
     }
+  }
+}
+
+// Recipient Selection Dialog
+class _RecipientSelectionDialog extends StatefulWidget {
+  final DonationCenter center;
+
+  const _RecipientSelectionDialog({required this.center});
+
+  @override
+  State<_RecipientSelectionDialog> createState() =>
+      _RecipientSelectionDialogState();
+}
+
+class _RecipientSelectionDialogState extends State<_RecipientSelectionDialog> {
+  List<BloodRequest> _pendingRequests = [];
+  BloodRequest? _selectedRecipient;
+  bool _isLoading = true;
+  bool _skipRecipient = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPendingRequests();
+  }
+
+  Future<void> _loadPendingRequests() async {
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('bloodRequests')
+          .where('status', whereIn: ['pending', 'approved'])
+          .limit(10)
+          .get();
+
+      if (mounted) {
+        setState(() {
+          _pendingRequests = snapshot.docs
+              .map((doc) => BloodRequest.fromFirestore(doc))
+              .toList();
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading pending requests: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Row(
+        children: [
+          const Icon(Icons.volunteer_activism, color: AppColors.bloodRed),
+          const SizedBox(width: 12),
+          const Text('রক্তদান নিশ্চিত করুন'),
+        ],
+      ),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'আপনি ${widget.center.name} এ রক্ত দিয়েছেন?',
+              style: const TextStyle(fontSize: 16),
+            ),
+            const SizedBox(height: 16),
+
+            // Option to skip recipient selection
+            CheckboxListTile(
+              value: _skipRecipient,
+              onChanged: (value) {
+                setState(() {
+                  _skipRecipient = value ?? false;
+                  if (_skipRecipient) _selectedRecipient = null;
+                });
+              },
+              title: const Text('সাধারণ রক্তদান (কোনো নির্দিষ্ট রোগী নেই)'),
+              controlAffinity: ListTileControlAffinity.leading,
+              dense: true,
+            ),
+
+            if (!_skipRecipient) ...[
+              const Divider(),
+              const Text(
+                'অথবা কোন রোগীর জন্য রক্ত দিয়েছেন সিলেক্ট করুন:',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+
+              if (_isLoading)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(16.0),
+                    child: CircularProgressIndicator(),
+                  ),
+                )
+              else if (_pendingRequests.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: Text(
+                    'কোনো পেন্ডিং রক্তের অনুরোধ নেই',
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                )
+              else
+                SizedBox(
+                  height: 200,
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: _pendingRequests.length,
+                    itemBuilder: (context, index) {
+                      final request = _pendingRequests[index];
+                      final isSelected = _selectedRecipient?.id == request.id;
+
+                      return Card(
+                        color: isSelected
+                            ? AppColors.bloodRed.withValues(alpha: 0.1)
+                            : null,
+                        child: ListTile(
+                          leading: Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: AppColors.bloodRed,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Center(
+                              child: Text(
+                                request.bloodType,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          ),
+                          title: Text(request.patientName),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(request.hospitalName),
+                              Text(
+                                request.urgency == UrgencyLevel.critical
+                                    ? '🔴 CRITICAL'
+                                    : request.urgency == UrgencyLevel.urgent
+                                    ? '🟠 URGENT'
+                                    : '🟢 Normal',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color:
+                                      request.urgency == UrgencyLevel.critical
+                                      ? Colors.red
+                                      : request.urgency == UrgencyLevel.urgent
+                                      ? Colors.orange
+                                      : Colors.green,
+                                ),
+                              ),
+                            ],
+                          ),
+                          trailing: isSelected
+                              ? const Icon(
+                                  Icons.check_circle,
+                                  color: AppColors.bloodRed,
+                                )
+                              : const Icon(Icons.radio_button_unchecked),
+                          onTap: () {
+                            setState(() {
+                              _selectedRecipient = request;
+                              _skipRecipient = false;
+                            });
+                          },
+                        ),
+                      );
+                    },
+                  ),
+                ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, {'confirmed': false}),
+          child: const Text('বাতিল'),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            Navigator.pop(context, {
+              'confirmed': true,
+              'recipient': _skipRecipient ? null : _selectedRecipient,
+            });
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.green,
+            foregroundColor: Colors.white,
+          ),
+          child: const Text('নিশ্চিত করুন'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Dialog for manually adding a past donation
+class _ManualDonationDialog extends StatefulWidget {
+  const _ManualDonationDialog();
+
+  @override
+  State<_ManualDonationDialog> createState() => _ManualDonationDialogState();
+}
+
+class _ManualDonationDialogState extends State<_ManualDonationDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _locationController = TextEditingController();
+  final _notesController = TextEditingController();
+  DateTime _selectedDate = DateTime.now();
+  bool _isSubmitting = false;
+
+  @override
+  void dispose() {
+    _locationController.dispose();
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _selectDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: AppColors.bloodRed,
+              onPrimary: Colors.white,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null && picked != _selectedDate) {
+      setState(() {
+        _selectedDate = picked;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppColors.bloodRed.withValues(alpha: 0.1),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.add_circle, color: AppColors.bloodRed),
+          ),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Text('Add Past Donation', style: TextStyle(fontSize: 18)),
+          ),
+        ],
+      ),
+      content: Form(
+        key: _formKey,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'আপনি যদি এই অ্যাপের বাইরে রক্তদান করে থাকেন, সেই তথ্য এখানে যোগ করুন।',
+                style: TextStyle(color: Colors.grey, fontSize: 14),
+              ),
+              const SizedBox(height: 20),
+
+              // Date Picker
+              const Text(
+                'রক্তদানের তারিখ *',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              InkWell(
+                onTap: _selectDate,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey[300]!),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.calendar_today,
+                        color: AppColors.bloodRed,
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        '${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}',
+                        style: const TextStyle(fontSize: 16),
+                      ),
+                      const Spacer(),
+                      const Icon(Icons.arrow_drop_down, color: Colors.grey),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Location
+              const Text(
+                'স্থান / হাসপাতাল / ব্লাড ব্যাংক *',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _locationController,
+                decoration: InputDecoration(
+                  hintText: 'যেমন: ঢাকা মেডিকেল কলেজ',
+                  prefixIcon: const Icon(
+                    Icons.location_on,
+                    color: AppColors.bloodRed,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: AppColors.bloodRed),
+                  ),
+                ),
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'দয়া করে স্থান লিখুন';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+
+              // Notes (optional)
+              const Text(
+                'নোট (ঐচ্ছিক)',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _notesController,
+                maxLines: 2,
+                decoration: InputDecoration(
+                  hintText: 'কোনো বিশেষ মন্তব্য...',
+                  prefixIcon: const Padding(
+                    padding: EdgeInsets.only(bottom: 24),
+                    child: Icon(Icons.note, color: Colors.grey),
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Warning
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange[50],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.orange[200]!),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.info_outline, color: Colors.orange, size: 20),
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'এই তথ্য আপনার donation history তে যোগ হবে এবং 120 দিনের নিয়ম প্রযোজ্য হবে।',
+                        style: TextStyle(fontSize: 12, color: Colors.orange),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isSubmitting ? null : () => Navigator.pop(context),
+          child: const Text('বাতিল'),
+        ),
+        ElevatedButton(
+          onPressed: _isSubmitting
+              ? null
+              : () {
+                  if (_formKey.currentState!.validate()) {
+                    Navigator.pop(context, {
+                      'confirmed': true,
+                      'date': _selectedDate,
+                      'location': _locationController.text.trim(),
+                      'notes': _notesController.text.trim(),
+                    });
+                  }
+                },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.bloodRed,
+            foregroundColor: Colors.white,
+          ),
+          child: _isSubmitting
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                    strokeWidth: 2,
+                  ),
+                )
+              : const Text('সংরক্ষণ করুন'),
+        ),
+      ],
+    );
   }
 }

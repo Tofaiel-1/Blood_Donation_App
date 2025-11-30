@@ -23,6 +23,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
   String _selectedBloodType = 'A+';
+  DonorAvailability _availability = DonorAvailability.available;
 
   final List<String> _bloodTypes = [
     'A+',
@@ -75,12 +76,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
 
       final data = profile.data() ?? {};
+
+      // Parse availability
+      DonorAvailability avail = DonorAvailability.available;
+      final availStr = data['availability']?.toString().toLowerCase() ?? '';
+      if (availStr == 'unavailable') {
+        avail = DonorAvailability.unavailable;
+      } else if (availStr == 'busy') {
+        avail = DonorAvailability.busy;
+      }
+      _availability = avail;
+
       currentUser = User(
         email: user.email ?? data['email'] ?? '',
         name: data['name'] ?? user.displayName ?? '',
         bloodType: data['bloodType'] ?? 'Unknown',
         phone: data['phone'] ?? '',
         role: UserRole.user,
+        availability: avail,
+        totalDonations: data['totalDonations'] ?? 0,
+        livesSaved: data['livesSaved'] ?? data['totalDonations'] ?? 0,
       );
 
       // Populate controllers and blood type
@@ -139,16 +154,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
               (data['donationDate'] as Timestamp?)?.toDate() ?? DateTime.now(),
           location: data['location'] ?? '',
           status: data['status'] ?? 'completed',
+          notes: data['notes'],
+          // Recipient information
+          recipientRequestId: data['recipientRequestId'],
+          recipientPatientName: data['recipientPatientName'],
+          recipientHospital: data['recipientHospital'],
+          recipientBloodType: data['recipientBloodType'],
+          recipientContactPhone: data['recipientContactPhone'],
         );
       }).toList();
 
-      // Calculate days until next donation (90 days from last donation)
+      // Calculate days until next donation (120 days from last donation)
       if (donationHistory.isNotEmpty) {
         final lastDonation = donationHistory.first.donationDate;
         final daysSinceLastDonation = DateTime.now()
             .difference(lastDonation)
             .inDays;
-        daysUntilNextDonation = 90 - daysSinceLastDonation;
+        daysUntilNextDonation =
+            120 - daysSinceLastDonation; // 120 days between donations
         if (daysUntilNextDonation < 0) {
           daysUntilNextDonation = 0; // Can donate now
         }
@@ -186,13 +209,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isSmallScreen = screenWidth < 360;
 
     return Scaffold(
       body: CustomScrollView(
         slivers: [
           // Profile header with gradient
           SliverAppBar(
-            expandedHeight: 280,
+            expandedHeight: isSmallScreen ? 240 : 280,
             floating: false,
             pinned: true,
             flexibleSpace: FlexibleSpaceBar(
@@ -204,11 +229,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const SizedBox(height: 20),
+                      SizedBox(height: isSmallScreen ? 16 : 20),
                       // Avatar
                       Container(
-                        width: 90,
-                        height: 90,
+                        width: isSmallScreen ? 70 : 90,
+                        height: isSmallScreen ? 70 : 90,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           color: Colors.white.withValues(alpha: 0.3),
@@ -219,34 +244,49 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             currentUser!.name.isNotEmpty
                                 ? currentUser!.name[0].toUpperCase()
                                 : 'U',
-                            style: const TextStyle(
-                              fontSize: 42,
+                            style: TextStyle(
+                              fontSize: isSmallScreen ? 32 : 42,
                               fontWeight: FontWeight.bold,
                               color: Colors.white,
                             ),
                           ),
                         ),
                       ),
-                      const SizedBox(height: 12),
-                      Text(
-                        currentUser!.name,
-                        style: Theme.of(context).textTheme.headlineSmall
-                            ?.copyWith(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                            ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        currentUser!.email,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Colors.white.withValues(alpha: 0.9),
+                      SizedBox(height: isSmallScreen ? 8 : 12),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Text(
+                          currentUser!.name,
+                          style: Theme.of(context).textTheme.headlineSmall
+                              ?.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: isSmallScreen ? 18 : 24,
+                              ),
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      SizedBox(height: isSmallScreen ? 4 : 6),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Text(
+                          currentUser!.email,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: Colors.white.withValues(alpha: 0.9),
+                                fontSize: isSmallScreen ? 12 : 14,
+                              ),
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      SizedBox(height: isSmallScreen ? 6 : 8),
                       BloodTypeBadge(
                         bloodType: currentUser!.bloodType,
-                        size: 55,
+                        size: isSmallScreen ? 45 : 55,
                       ),
                     ],
                   ),
@@ -256,10 +296,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             actions: [
               IconButton(
                 icon: const Icon(Icons.edit, color: Colors.white),
-                onPressed: () {
-                  // Edit profile
-                  _showEditProfile();
-                },
+                onPressed: _showEditProfile,
+                tooltip: 'Edit Profile',
               ),
             ],
           ),
@@ -267,7 +305,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           // Content
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.all(16.0),
+              padding: EdgeInsets.all(isSmallScreen ? 12.0 : 16.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -279,75 +317,88 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             child: CircularProgressIndicator(),
                           ),
                         )
-                      : Column(
-                          children: [
-                            Row(
+                      : LayoutBuilder(
+                          builder: (context, constraints) {
+                            final isVerySmall = constraints.maxWidth < 320;
+                            return Column(
                               children: [
-                                Expanded(
-                                  child: StatCard(
-                                    value: donationHistory
-                                        .where((d) => d.status == 'completed')
-                                        .length
-                                        .toString(),
-                                    label: 'Completed Donations',
-                                    icon: Icons.bloodtype,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: StatCard(
-                                    value:
-                                        (donationHistory
-                                                    .where(
-                                                      (d) =>
-                                                          d.status ==
-                                                          'completed',
-                                                    )
-                                                    .length *
-                                                3)
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: StatCard(
+                                        value:
+                                            (currentUser?.totalDonations ?? 0)
+                                                .toString(),
+                                        label: isVerySmall
+                                            ? 'Donations'
+                                            : 'Total\nDonations',
+                                        icon: Icons.bloodtype,
+                                        color: AppColors.bloodRed,
+                                      ),
+                                    ),
+                                    SizedBox(width: isSmallScreen ? 8 : 12),
+                                    Expanded(
+                                      child: StatCard(
+                                        value: (currentUser?.livesSaved ?? 0)
                                             .toString(),
-                                    label: 'Lives Saved',
-                                    icon: Icons.favorite,
-                                    color: Colors.green,
-                                  ),
+                                        label: 'Lives\nSaved',
+                                        icon: Icons.favorite,
+                                        color: AppColors.urgentRed,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                SizedBox(height: isSmallScreen ? 8 : 12),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: StatCard(
+                                        value: daysUntilNextDonation == 0
+                                            ? 'Ready'
+                                            : daysUntilNextDonation.toString(),
+                                        label: daysUntilNextDonation == 0
+                                            ? (isVerySmall
+                                                  ? 'Ready'
+                                                  : 'You Can\nDonate Now')
+                                            : (isVerySmall
+                                                  ? 'Days Left'
+                                                  : 'Days Until\nNext Donation'),
+                                        icon: Icons.calendar_today,
+                                        color: daysUntilNextDonation == 0
+                                            ? AppColors.hopeGreen
+                                            : AppColors.lifeOrange,
+                                      ),
+                                    ),
+                                    SizedBox(width: isSmallScreen ? 8 : 12),
+                                    Expanded(
+                                      child: StatCard(
+                                        value: donationHistory
+                                            .where(
+                                              (d) => d.status == 'scheduled',
+                                            )
+                                            .length
+                                            .toString(),
+                                        label: 'Scheduled',
+                                        icon: Icons.calendar_today,
+                                        color: Colors.blue,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ],
-                            ),
-                            const SizedBox(height: 12),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: StatCard(
-                                    value: daysUntilNextDonation.toString(),
-                                    label: daysUntilNextDonation == 0
-                                        ? 'Can Donate'
-                                        : 'Days Left',
-                                    icon: Icons.access_time,
-                                    color: daysUntilNextDonation == 0
-                                        ? AppColors.hopeGreen
-                                        : AppColors.warningAmber,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: StatCard(
-                                    value: donationHistory
-                                        .where((d) => d.status == 'scheduled')
-                                        .length
-                                        .toString(),
-                                    label: 'Scheduled',
-                                    icon: Icons.calendar_today,
-                                    color: Colors.blue,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
+                            );
+                          },
                         ),
+                  SizedBox(height: isSmallScreen ? 16 : 24),
+
+                  // Achievements/Badges Section
+                  if (!isLoadingDonations && currentUser != null)
+                    _buildBadgesSection(context),
                   const SizedBox(height: 24),
 
                   // Settings section
                   _buildSectionCard(context, 'Settings', [
+                    _buildAvailabilityTile(context),
                     _buildSettingsTile(
                       context,
                       Icons.dark_mode,
@@ -447,6 +498,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               location: donation.location,
                               date: donation.donationDate,
                               isCompleted: donation.status == 'completed',
+                              recipientPatientName:
+                                  donation.recipientPatientName,
+                              recipientHospital: donation.recipientHospital,
+                              recipientBloodType: donation.recipientBloodType,
                             );
                           },
                         ),
@@ -513,6 +568,404 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  Widget _buildBadgesSection(BuildContext context) {
+    final totalDonations = donationHistory
+        .where((d) => d.status == 'completed')
+        .length;
+    final currentBadge = _getBadgeForDonations(totalDonations);
+    final nextBadge = _getNextBadge(totalDonations);
+    final donationsUntilNext = nextBadge?['required'] as int? ?? 0;
+    final remaining = totalDonations < donationsUntilNext
+        ? donationsUntilNext - totalDonations
+        : 0;
+
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isSmallScreen = screenWidth < 360;
+
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: EdgeInsets.all(isSmallScreen ? 16.0 : 20.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.emoji_events,
+                  color: Colors.amber[700],
+                  size: isSmallScreen ? 20 : 24,
+                ),
+                SizedBox(width: isSmallScreen ? 8 : 12),
+                Expanded(
+                  child: Text(
+                    'Achievements',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      fontSize: isSmallScreen ? 18 : 22,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: isSmallScreen ? 16 : 20),
+
+            // Current Badge
+            if (currentBadge != null) ...[
+              Container(
+                padding: EdgeInsets.all(isSmallScreen ? 12 : 16),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      (currentBadge['color'] as Color).withValues(alpha: 0.2),
+                      (currentBadge['color'] as Color).withValues(alpha: 0.05),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: (currentBadge['color'] as Color).withValues(
+                      alpha: 0.3,
+                    ),
+                    width: 2,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Text(
+                      currentBadge['emoji'] as String,
+                      style: TextStyle(fontSize: isSmallScreen ? 36 : 48),
+                    ),
+                    SizedBox(width: isSmallScreen ? 12 : 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            currentBadge['name'] as String,
+                            style: TextStyle(
+                              fontSize: isSmallScreen ? 16 : 20,
+                              fontWeight: FontWeight.bold,
+                              color: currentBadge['color'] as Color,
+                            ),
+                          ),
+                          SizedBox(height: isSmallScreen ? 2 : 4),
+                          Text(
+                            currentBadge['description'] as String,
+                            style: TextStyle(
+                              color: Colors.grey[600],
+                              fontSize: isSmallScreen ? 12 : 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(height: isSmallScreen ? 12 : 16),
+            ],
+
+            // Progress to Next Badge
+            if (nextBadge != null && remaining > 0) ...[
+              const Divider(),
+              SizedBox(height: isSmallScreen ? 12 : 16),
+              Text(
+                'Next Milestone',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey[700],
+                  fontSize: isSmallScreen ? 13 : 14,
+                ),
+              ),
+              SizedBox(height: isSmallScreen ? 8 : 12),
+              Row(
+                children: [
+                  Text(
+                    nextBadge['emoji'] as String,
+                    style: TextStyle(fontSize: isSmallScreen ? 24 : 32),
+                  ),
+                  SizedBox(width: isSmallScreen ? 8 : 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          nextBadge['name'] as String,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: isSmallScreen ? 14 : 16,
+                          ),
+                        ),
+                        SizedBox(height: isSmallScreen ? 6 : 8),
+                        LinearProgressIndicator(
+                          value: totalDonations / donationsUntilNext,
+                          backgroundColor: Colors.grey[200],
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            nextBadge['color'] as Color,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '$remaining more donation${remaining > 1 ? 's' : ''} to unlock',
+                          style: TextStyle(
+                            fontSize: isSmallScreen ? 10 : 12,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+
+            // All Badges Preview
+            SizedBox(height: isSmallScreen ? 16 : 20),
+            const Divider(),
+            SizedBox(height: isSmallScreen ? 12 : 16),
+            Text(
+              'All Badges',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[700],
+                fontSize: isSmallScreen ? 13 : 14,
+              ),
+            ),
+            SizedBox(height: isSmallScreen ? 8 : 12),
+            Wrap(
+              spacing: isSmallScreen ? 8 : 12,
+              runSpacing: isSmallScreen ? 8 : 12,
+              children: _getAllBadges().map((badge) {
+                final isUnlocked = totalDonations >= (badge['required'] as int);
+                final badgeSize = isSmallScreen ? 48.0 : 56.0;
+                final emojiSize = isSmallScreen ? 24.0 : 28.0;
+
+                return Opacity(
+                  opacity: isUnlocked ? 1.0 : 0.3,
+                  child: Tooltip(
+                    message: badge['name'] as String,
+                    child: Container(
+                      width: badgeSize,
+                      height: badgeSize,
+                      decoration: BoxDecoration(
+                        color: isUnlocked
+                            ? (badge['color'] as Color).withValues(alpha: 0.1)
+                            : Colors.grey[100],
+                        borderRadius: BorderRadius.circular(
+                          isSmallScreen ? 8 : 12,
+                        ),
+                        border: Border.all(
+                          color: isUnlocked
+                              ? (badge['color'] as Color)
+                              : Colors.grey[300]!,
+                          width: 2,
+                        ),
+                      ),
+                      child: Center(
+                        child: Text(
+                          badge['emoji'] as String,
+                          style: TextStyle(fontSize: emojiSize),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Map<String, dynamic>? _getBadgeForDonations(int donations) {
+    final allBadges = _getAllBadges();
+    Map<String, dynamic>? currentBadge;
+
+    for (var badge in allBadges) {
+      if (donations >= (badge['required'] as int)) {
+        currentBadge = badge;
+      }
+    }
+
+    return currentBadge;
+  }
+
+  Map<String, dynamic>? _getNextBadge(int donations) {
+    final allBadges = _getAllBadges();
+
+    for (var badge in allBadges) {
+      if (donations < (badge['required'] as int)) {
+        return badge;
+      }
+    }
+
+    return null; // Already at max badge
+  }
+
+  List<Map<String, dynamic>> _getAllBadges() {
+    return [
+      {
+        'name': 'First Time Donor',
+        'emoji': '🩸',
+        'required': 1,
+        'color': Colors.pink,
+        'description': 'Congratulations on your first donation!',
+      },
+      {
+        'name': 'Bronze Donor',
+        'emoji': '🥉',
+        'required': 3,
+        'color': Colors.brown,
+        'description': '3 successful blood donations',
+      },
+      {
+        'name': 'Silver Donor',
+        'emoji': '🥈',
+        'required': 5,
+        'color': Colors.grey,
+        'description': '5 successful blood donations',
+      },
+      {
+        'name': 'Gold Donor',
+        'emoji': '🥇',
+        'required': 10,
+        'color': Colors.amber,
+        'description': '10 successful blood donations',
+      },
+      {
+        'name': 'Platinum Donor',
+        'emoji': '💎',
+        'required': 20,
+        'color': Colors.blue,
+        'description': '20 successful blood donations',
+      },
+      {
+        'name': 'Legendary Donor',
+        'emoji': '👑',
+        'required': 50,
+        'color': Colors.purple,
+        'description': '50 successful blood donations - You are a legend!',
+      },
+    ];
+  }
+
+  Widget _buildAvailabilityTile(BuildContext context) {
+    Color statusColor;
+    String statusText;
+    IconData statusIcon;
+
+    switch (_availability) {
+      case DonorAvailability.available:
+        statusColor = Colors.green;
+        statusText = 'Available';
+        statusIcon = Icons.check_circle;
+        break;
+      case DonorAvailability.unavailable:
+        statusColor = Colors.red;
+        statusText = 'Unavailable';
+        statusIcon = Icons.cancel;
+        break;
+      case DonorAvailability.busy:
+        statusColor = Colors.orange;
+        statusText = 'Busy';
+        statusIcon = Icons.schedule;
+        break;
+    }
+
+    return ListTile(
+      leading: Icon(statusIcon, color: statusColor),
+      title: const Text('Donation Availability'),
+      subtitle: Text(
+        statusText,
+        style: TextStyle(color: statusColor, fontWeight: FontWeight.bold),
+      ),
+      trailing: PopupMenuButton<DonorAvailability>(
+        icon: const Icon(Icons.arrow_drop_down),
+        onSelected: (DonorAvailability value) async {
+          setState(() {
+            _availability = value;
+          });
+          await _updateAvailability(value);
+        },
+        itemBuilder: (context) => [
+          PopupMenuItem(
+            value: DonorAvailability.available,
+            child: Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.green, size: 20),
+                const SizedBox(width: 12),
+                const Text('Available'),
+              ],
+            ),
+          ),
+          PopupMenuItem(
+            value: DonorAvailability.busy,
+            child: Row(
+              children: [
+                Icon(Icons.schedule, color: Colors.orange, size: 20),
+                const SizedBox(width: 12),
+                const Text('Busy'),
+              ],
+            ),
+          ),
+          PopupMenuItem(
+            value: DonorAvailability.unavailable,
+            child: Row(
+              children: [
+                Icon(Icons.cancel, color: Colors.red, size: 20),
+                const SizedBox(width: 12),
+                const Text('Unavailable'),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _updateAvailability(DonorAvailability availability) async {
+    try {
+      final user = fb_auth.FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .update({
+            'availability': availability.toString().split('.').last,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white),
+                const SizedBox(width: 12),
+                Text(
+                  'Availability updated to ${availability.toString().split('.').last}',
+                ),
+              ],
+            ),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error updating availability: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   Widget _buildSettingsTile(
     BuildContext context,
     IconData icon,
@@ -542,107 +995,149 @@ class _ProfileScreenState extends State<ProfileScreen> {
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) => StatefulBuilder(
-        builder: (context, setModalState) => Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom,
-            left: 24,
-            right: 24,
-            top: 24,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[300],
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
+        builder: (context, setModalState) => DraggableScrollableSheet(
+          initialChildSize: 0.75,
+          minChildSize: 0.5,
+          maxChildSize: 0.95,
+          expand: false,
+          builder: (context, scrollController) => SingleChildScrollView(
+            controller: scrollController,
+            child: Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+                left: 20,
+                right: 20,
+                top: 12,
               ),
-              const SizedBox(height: 20),
-              Text(
-                'Edit Profile',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(height: 20),
-              TextField(
-                decoration: const InputDecoration(
-                  labelText: 'Name',
-                  prefixIcon: Icon(Icons.person),
-                  border: OutlineInputBorder(),
-                ),
-                controller: _nameController,
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                decoration: const InputDecoration(
-                  labelText: 'Phone',
-                  prefixIcon: Icon(Icons.phone),
-                  border: OutlineInputBorder(),
-                ),
-                controller: _phoneController,
-                keyboardType: TextInputType.phone,
-              ),
-              const SizedBox(height: 16),
-              Column(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.bloodtype, color: Colors.grey),
-                      const SizedBox(width: 12),
-                      Text(
-                        'Blood Type',
-                        style: Theme.of(context).textTheme.titleMedium,
+                  // Handle bar
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[300],
+                        borderRadius: BorderRadius.circular(2),
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey.shade300),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: ListView.separated(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: _bloodTypes.length,
-                      separatorBuilder: (context, index) =>
-                          const Divider(height: 1),
-                      itemBuilder: (context, index) {
-                        final bloodType = _bloodTypes[index];
-                        return RadioListTile<String>(
-                          title: Text(bloodType),
-                          value: bloodType,
-                          groupValue: _selectedBloodType,
-                          onChanged: (value) {
-                            setModalState(() {
-                              _selectedBloodType = value!;
-                            });
-                          },
-                          activeColor: Theme.of(context).colorScheme.primary,
-                        );
-                      },
                     ),
                   ),
+                  const SizedBox(height: 20),
+
+                  // Title
+                  Text(
+                    'Edit Profile',
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Name field
+                  TextField(
+                    decoration: InputDecoration(
+                      labelText: 'Name',
+                      hintText: 'Enter your name',
+                      prefixIcon: const Icon(Icons.person),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      filled: true,
+                      fillColor: Colors.grey[50],
+                    ),
+                    controller: _nameController,
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Phone field
+                  TextField(
+                    decoration: InputDecoration(
+                      labelText: 'Phone',
+                      hintText: 'Enter your phone number',
+                      prefixIcon: const Icon(Icons.phone),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      filled: true,
+                      fillColor: Colors.grey[50],
+                    ),
+                    controller: _phoneController,
+                    keyboardType: TextInputType.phone,
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Blood Type section
+                  Text(
+                    'Blood Type',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Blood type chips
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: _bloodTypes.map((bloodType) {
+                      final isSelected = _selectedBloodType == bloodType;
+                      return ChoiceChip(
+                        label: Text(
+                          bloodType,
+                          style: TextStyle(
+                            color: isSelected ? Colors.white : Colors.black87,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        selected: isSelected,
+                        onSelected: (selected) {
+                          setModalState(() {
+                            _selectedBloodType = bloodType;
+                          });
+                        },
+                        selectedColor: AppColors.bloodRed,
+                        backgroundColor: Colors.grey[200],
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 32),
+
+                  // Save button
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton.icon(
+                      onPressed: () => _saveProfileChanges(context),
+                      icon: const Icon(Icons.check),
+                      label: const Text(
+                        'Save Changes',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.bloodRed,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
                 ],
               ),
-              const SizedBox(height: 24),
-              GradientButton(
-                text: 'Save Changes',
-                icon: Icons.check,
-                isFullWidth: true,
-                onPressed: () => _saveProfileChanges(context),
-              ),
-              const SizedBox(height: 24),
-            ],
+            ),
           ),
         ),
       ),

@@ -709,6 +709,13 @@ class _HomeScreenState extends State<HomeScreen>
       timeAgo = '${timeSinceRequest.inMinutes} minutes ago';
     }
 
+    // Check if user's blood type matches the request
+    final userBloodType = _cachedUser?.bloodType ?? 'Unknown';
+    final canRespond =
+        userBloodType == request.bloodType && _daysUntilNextDonation == 0;
+    final wrongBloodType =
+        userBloodType != request.bloodType && userBloodType != 'Unknown';
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -769,6 +776,35 @@ class _HomeScreenState extends State<HomeScreen>
                   ],
                 ),
                 const SizedBox(height: 24),
+
+                // Blood type compatibility warning
+                if (wrongBloodType) ...[
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.orange[50],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.orange.shade300),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.info, color: Colors.orange[700], size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Your blood type ($userBloodType) doesn\'t match this request (${request.bloodType})',
+                            style: TextStyle(
+                              color: Colors.orange[900],
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
                 _buildDetailRow(
                   Icons.person,
                   'Patient: ${request.patientName}',
@@ -795,16 +831,29 @@ class _HomeScreenState extends State<HomeScreen>
                 ],
                 const SizedBox(height: 32),
                 GradientButton(
-                  text: _daysUntilNextDonation == 0
-                      ? 'I Can Help'
-                      : 'Not Eligible Yet',
+                  text: wrongBloodType
+                      ? 'Blood Type Mismatch'
+                      : _daysUntilNextDonation > 0
+                      ? 'Not Eligible Yet'
+                      : 'I Can Help',
                   icon: Icons.volunteer_activism,
                   isFullWidth: true,
-                  onPressed: _daysUntilNextDonation == 0
+                  onPressed: canRespond
                       ? () => _volunteerToDonate(context, request)
                       : null,
                 ),
-                if (_daysUntilNextDonation > 0) ...[
+                if (wrongBloodType) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    'You can only respond to $userBloodType blood requests',
+                    style: TextStyle(
+                      color: Colors.orange[700],
+                      fontSize: 14,
+                      fontStyle: FontStyle.italic,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ] else if (_daysUntilNextDonation > 0) ...[
                   const SizedBox(height: 12),
                   Text(
                     'You can donate again in $_daysUntilNextDonation days',
@@ -838,6 +887,8 @@ class _HomeScreenState extends State<HomeScreen>
     final userData = userDoc.data() ?? {};
     final age = userData['age'] as int? ?? 0;
     final weight = (userData['weight'] as num?)?.toDouble() ?? 0.0;
+
+    if (!mounted) return;
 
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
@@ -905,8 +956,9 @@ class _HomeScreenState extends State<HomeScreen>
             'lastDonationDate': Timestamp.fromDate(data['date'] as DateTime),
           });
 
-      // Reload data
+      // Reload data to show updated stats
       await _loadDonationData();
+      await _loadUserData(); // Reload user profile with updated stats
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -971,6 +1023,21 @@ class _HomeScreenState extends State<HomeScreen>
         'donorName': _cachedUser?.name ?? 'User',
         'donorPhone': _cachedUser?.phone ?? '',
         'status': 'volunteered',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      // Log activity for super admin dashboard
+      await FirebaseFirestore.instance.collection('activityLogs').add({
+        'action': 'Donor Volunteered',
+        'description':
+            '${_cachedUser?.name ?? 'User'} volunteered for ${request.bloodType} blood request at ${request.hospitalName}',
+        'user': _cachedUser?.name ?? 'User',
+        'userId': currentUser.uid,
+        'bloodType': request.bloodType,
+        'requestId': request.id,
+        'hospitalName': request.hospitalName,
+        'status': 'Success',
+        'timestamp': FieldValue.serverTimestamp(),
         'createdAt': FieldValue.serverTimestamp(),
       });
 
@@ -1041,6 +1108,66 @@ class _AddDonationDialogState extends State<_AddDonationDialog> {
   final _recipientHospitalController = TextEditingController();
   DateTime _selectedDate = DateTime.now();
   final bool _isSubmitting = false;
+
+  List<String> _hospitalSuggestions = [];
+  bool _loadingHospitals = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadHospitalSuggestions();
+  }
+
+  /// Load hospital names from Firebase
+  Future<void> _loadHospitalSuggestions() async {
+    setState(() {
+      _loadingHospitals = true;
+    });
+
+    try {
+      // Load from donation centers
+      final centersSnapshot = await FirebaseFirestore.instance
+          .collection('donationCenters')
+          .limit(50)
+          .get();
+
+      final centersNames = centersSnapshot.docs
+          .map((doc) => doc.data()['name'] as String?)
+          .where((name) => name != null && name.isNotEmpty)
+          .cast<String>()
+          .toSet();
+
+      // Load from blood requests (hospitals)
+      final requestsSnapshot = await FirebaseFirestore.instance
+          .collection('bloodRequests')
+          .limit(50)
+          .get();
+
+      final hospitalNames = requestsSnapshot.docs
+          .map((doc) => doc.data()['hospitalName'] as String?)
+          .where((name) => name != null && name.isNotEmpty)
+          .cast<String>()
+          .toSet();
+
+      // Combine and sort
+      final allHospitals = {...centersNames, ...hospitalNames}.toList();
+      allHospitals.sort();
+
+      if (mounted) {
+        setState(() {
+          _hospitalSuggestions = allHospitals;
+          _loadingHospitals = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading hospital suggestions: $e');
+      if (mounted) {
+        setState(() {
+          _loadingHospitals = false;
+        });
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -1241,22 +1368,179 @@ class _AddDonationDialogState extends State<_AddDonationDialog> {
                 'Location *',
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: _locationController,
-                decoration: InputDecoration(
-                  hintText: 'e.g., Dhaka Medical College',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
+              const SizedBox(height: 4),
+              if (_loadingHospitals)
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 4),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 12,
+                        height: 12,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      SizedBox(width: 8),
+                      Text(
+                        'Loading hospital suggestions...',
+                        style: TextStyle(fontSize: 11, color: Colors.grey),
+                      ),
+                    ],
                   ),
-                  prefixIcon: const Icon(Icons.location_on),
                 ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Location is required';
+              const SizedBox(height: 4),
+              Autocomplete<String>(
+                optionsBuilder: (TextEditingValue textEditingValue) {
+                  if (textEditingValue.text.isEmpty) {
+                    return _hospitalSuggestions.take(5);
                   }
-                  return null;
+                  return _hospitalSuggestions.where((String option) {
+                    return option.toLowerCase().contains(
+                      textEditingValue.text.toLowerCase(),
+                    );
+                  });
                 },
+                onSelected: (String selection) {
+                  _locationController.text = selection;
+                },
+                fieldViewBuilder:
+                    (
+                      BuildContext context,
+                      TextEditingController textEditingController,
+                      FocusNode focusNode,
+                      VoidCallback onFieldSubmitted,
+                    ) {
+                      // Sync the autocomplete controller with our location controller
+                      textEditingController.text = _locationController.text;
+                      textEditingController.selection =
+                          _locationController.selection;
+
+                      textEditingController.addListener(() {
+                        _locationController.text = textEditingController.text;
+                        _locationController.selection =
+                            textEditingController.selection;
+                      });
+
+                      return TextFormField(
+                        controller: textEditingController,
+                        focusNode: focusNode,
+                        decoration: InputDecoration(
+                          hintText: 'Type or select hospital name',
+                          helperText: _hospitalSuggestions.isNotEmpty
+                              ? 'Suggestions available - start typing'
+                              : 'Or type your own hospital name',
+                          helperStyle: const TextStyle(fontSize: 11),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          prefixIcon: const Icon(Icons.local_hospital),
+                          suffixIcon: _locationController.text.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear, size: 20),
+                                  onPressed: () {
+                                    textEditingController.clear();
+                                    _locationController.clear();
+                                  },
+                                )
+                              : null,
+                        ),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return 'Location is required';
+                          }
+                          return null;
+                        },
+                      );
+                    },
+                optionsViewBuilder:
+                    (
+                      BuildContext context,
+                      AutocompleteOnSelected<String> onSelected,
+                      Iterable<String> options,
+                    ) {
+                      return Align(
+                        alignment: Alignment.topLeft,
+                        child: Material(
+                          elevation: 4,
+                          borderRadius: BorderRadius.circular(8),
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(
+                              maxHeight: 200,
+                              maxWidth: 400,
+                            ),
+                            child: ListView.builder(
+                              padding: EdgeInsets.zero,
+                              shrinkWrap: true,
+                              itemCount: options.length,
+                              itemBuilder: (BuildContext context, int index) {
+                                final String option = options.elementAt(index);
+                                return InkWell(
+                                  onTap: () {
+                                    onSelected(option);
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 12,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      border: Border(
+                                        bottom: BorderSide(
+                                          color: Colors.grey.shade200,
+                                          width: 1,
+                                        ),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          Icons.local_hospital,
+                                          size: 16,
+                                          color: AppColors.bloodRed,
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Text(
+                                            option,
+                                            style: const TextStyle(
+                                              fontSize: 14,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+              ),
+              const SizedBox(height: 12),
+              // Info about autocomplete
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.green[50],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.green.shade300),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.lightbulb_outline, color: Colors.green[700], size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '💡 Start typing to see hospital suggestions from our database',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.green[900],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 16),
               const Text(

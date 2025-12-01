@@ -240,7 +240,7 @@ class _BroadcastAlertDialogState extends State<BroadcastAlertDialog>
           Card(
             color: Color(
               BroadcastAlert.getAlertColor(_selectedType),
-            ).withOpacity(0.1),
+            ).withValues(alpha: 0.1),
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -284,7 +284,7 @@ class _BroadcastAlertDialogState extends State<BroadcastAlertDialog>
                         label: Text(_selectedType.name.toUpperCase()),
                         backgroundColor: Color(
                           BroadcastAlert.getAlertColor(_selectedType),
-                        ).withOpacity(0.2),
+                        ).withValues(alpha: 0.2),
                         labelStyle: TextStyle(
                           color: Color(
                             BroadcastAlert.getAlertColor(_selectedType),
@@ -398,7 +398,7 @@ class _BroadcastAlertDialogState extends State<BroadcastAlertDialog>
                 leading: CircleAvatar(
                   backgroundColor: Color(
                     BroadcastAlert.getAlertColor(alert.type),
-                  ).withOpacity(0.2),
+                  ).withValues(alpha: 0.2),
                   child: Text(
                     BroadcastAlert.getAlertIcon(alert.type),
                     style: const TextStyle(fontSize: 20),

@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart' as auth;
+import 'package:flutter/foundation.dart';
 
 /// Service to sync donation stats (totalDonations and livesSaved)
 /// Ensures Firebase data is consistent: 1 completed donation = 1 life saved
@@ -26,7 +27,7 @@ class DonationStatsService {
         'livesSaved': completedDonations, // 1 donation = 1 life saved
       });
     } catch (e) {
-      print('Error syncing lives saved: $e');
+      debugPrint('Error syncing lives saved: $e');
     }
   }
 
@@ -51,7 +52,7 @@ class DonationStatsService {
         };
       }
     } catch (e) {
-      print('Error getting user stats: $e');
+      debugPrint('Error getting user stats: $e');
     }
 
     return {'totalDonations': 0, 'livesSaved': 0};
@@ -69,7 +70,7 @@ class DonationStatsService {
         await syncLivesSaved(userDoc.id);
       }
     } catch (e) {
-      print('Error syncing all users: $e');
+      debugPrint('Error syncing all users: $e');
     }
   }
 }

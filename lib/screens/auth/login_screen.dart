@@ -5,7 +5,7 @@ import '../../utils/validators.dart';
 import '../../services/auth_service.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({Key? key}) : super(key: key);
+  const LoginScreen({super.key});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -581,24 +581,38 @@ class _LoginScreenState extends State<LoginScreen> {
           if (mounted) {
             Navigator.pushReplacementNamed(
               context,
-              '/email-verification',
+              '/verification',
               arguments: {'email': email, 'fromSignup': false},
             );
           }
           return;
         }
 
-        // Check if user is admin
-        final isAdmin = data?['role'] == 'admin' || data?['isAdmin'] == true;
+        // Check user role and navigate accordingly
+        final role = data?['role']?.toString().toLowerCase() ?? '';
+
+        // Debug: Print role information
+        debugPrint('🔍 Login Debug:');
+        debugPrint('   Email: $email');
+        debugPrint('   Role from Firestore: ${data?['role']}');
+        debugPrint('   Role (lowercase): $role');
+        debugPrint('   Email Verified: $emailVerified');
+        debugPrint('   Phone Verified: $phoneVerified');
 
         if (!mounted) return;
 
-        if (isAdmin) {
-          // Admin user - go to admin dashboard
-          Navigator.pushReplacementNamed(context, '/admin-dashboard');
+        if (role == 'superadmin' || role == 'admin') {
+          debugPrint('   ✅ Navigating to Super Admin Dashboard');
+          // Super Admin - go to super admin dashboard
+          Navigator.pushReplacementNamed(context, '/super-admin');
+        } else if (role == 'orgadmin') {
+          debugPrint('   ✅ Navigating to Org Admin Dashboard');
+          // Organization Admin - go to org admin dashboard
+          Navigator.pushReplacementNamed(context, '/org-admin');
         } else {
+          debugPrint('   ✅ Navigating to Home (Regular User)');
           // Regular user - go to main app
-          Navigator.pushReplacementNamed(context, '/main');
+          Navigator.pushReplacementNamed(context, '/home');
         }
       } catch (e) {
         if (!mounted) return;

@@ -71,7 +71,7 @@ class _NoticeBarState extends State<NoticeBar>
             decoration: BoxDecoration(
               color: Color(
                 BroadcastAlert.getAlertColor(alert.type),
-              ).withOpacity(0.1),
+              ).withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
                 color: Color(BroadcastAlert.getAlertColor(alert.type)),

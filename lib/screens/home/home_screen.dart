@@ -826,10 +826,26 @@ class _HomeScreenState extends State<HomeScreen>
 
   /// Show dialog to add manual donation
   Future<void> _showAddDonationDialog() async {
+    // Get user data for validation
+    final currentUser = auth.FirebaseAuth.instance.currentUser;
+    if (currentUser == null) return;
+
+    final userDoc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(currentUser.uid)
+        .get();
+
+    final userData = userDoc.data() ?? {};
+    final age = userData['age'] as int? ?? 0;
+    final weight = (userData['weight'] as num?)?.toDouble() ?? 0.0;
+
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (context) =>
-          _AddDonationDialog(daysUntilNextDonation: _daysUntilNextDonation),
+      builder: (context) => _AddDonationDialog(
+        daysUntilNextDonation: _daysUntilNextDonation,
+        userAge: age,
+        userWeight: weight,
+      ),
     );
 
     if (result != null && result['confirmed'] == true) {
@@ -1004,8 +1020,14 @@ class _HomeScreenState extends State<HomeScreen>
 /// Dialog for adding manual donation
 class _AddDonationDialog extends StatefulWidget {
   final int daysUntilNextDonation;
+  final int userAge;
+  final double userWeight;
 
-  const _AddDonationDialog({required this.daysUntilNextDonation});
+  const _AddDonationDialog({
+    required this.daysUntilNextDonation,
+    required this.userAge,
+    required this.userWeight,
+  });
 
   @override
   State<_AddDonationDialog> createState() => _AddDonationDialogState();
@@ -1018,7 +1040,7 @@ class _AddDonationDialogState extends State<_AddDonationDialog> {
   final _recipientNameController = TextEditingController();
   final _recipientHospitalController = TextEditingController();
   DateTime _selectedDate = DateTime.now();
-  bool _isSubmitting = false;
+  final bool _isSubmitting = false;
 
   @override
   void dispose() {
@@ -1060,9 +1082,39 @@ class _AddDonationDialogState extends State<_AddDonationDialog> {
     return true; // No previous donation or already eligible
   }
 
+  /// Check eligibility based on age and weight
+  Map<String, dynamic> _checkEligibility() {
+    final errors = <String>[];
+
+    // Age check: minimum 18 years
+    if (widget.userAge < 18) {
+      errors.add('বয়স কমপক্ষে ১৮ বছর হতে হবে');
+    }
+
+    // Age check: maximum 65 years (recommended)
+    if (widget.userAge > 65) {
+      errors.add('বয়স ৬৫ বছরের বেশি হলে ডাক্তারের পরামর্শ নিন');
+    }
+
+    // Weight check: minimum 50 kg
+    if (widget.userWeight > 0 && widget.userWeight < 50) {
+      errors.add('ওজন কমপক্ষে ৫০ কেজি হতে হবে');
+    }
+
+    // Weight not set warning
+    if (widget.userWeight == 0) {
+      errors.add('আপনার ওজন profile এ সেট করুন');
+    }
+
+    return {'eligible': errors.isEmpty, 'errors': errors};
+  }
+
   @override
   Widget build(BuildContext context) {
     final canAdd = _canAddDonation();
+    final eligibility = _checkEligibility();
+    final isEligible = eligibility['eligible'] as bool;
+    final errors = eligibility['errors'] as List<String>;
 
     return AlertDialog(
       title: Row(
@@ -1079,6 +1131,49 @@ class _AddDonationDialogState extends State<_AddDonationDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Eligibility warnings
+              if (!isEligible) ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red[50],
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.red, width: 2),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.warning, color: Colors.red[700]),
+                          const SizedBox(width: 8),
+                          Text(
+                            'রক্তদানের যোগ্যতা সমস্যা',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.red[900],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      ...errors.map(
+                        (error) => Padding(
+                          padding: const EdgeInsets.only(left: 32, top: 4),
+                          child: Text(
+                            '• $error',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.red[800],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
               if (widget.daysUntilNextDonation > 0) ...[
                 Container(
                   padding: const EdgeInsets.all(12),
@@ -1252,7 +1347,7 @@ class _AddDonationDialogState extends State<_AddDonationDialog> {
           child: const Text('Cancel'),
         ),
         ElevatedButton(
-          onPressed: _isSubmitting || !canAdd
+          onPressed: _isSubmitting || !canAdd || !isEligible
               ? null
               : () {
                   if (_formKey.currentState!.validate()) {
@@ -1268,7 +1363,9 @@ class _AddDonationDialogState extends State<_AddDonationDialog> {
                   }
                 },
           style: ElevatedButton.styleFrom(
-            backgroundColor: canAdd ? AppColors.bloodRed : Colors.grey,
+            backgroundColor: (canAdd && isEligible)
+                ? AppColors.bloodRed
+                : Colors.grey,
             foregroundColor: Colors.white,
           ),
           child: const Text('Add Donation'),

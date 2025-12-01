@@ -1769,7 +1769,7 @@ class _ManualDonationDialogState extends State<_ManualDonationDialog> {
   final _locationController = TextEditingController();
   final _notesController = TextEditingController();
   DateTime _selectedDate = DateTime.now();
-  bool _isSubmitting = false;
+  final bool _isSubmitting = false;
 
   @override
   void dispose() {

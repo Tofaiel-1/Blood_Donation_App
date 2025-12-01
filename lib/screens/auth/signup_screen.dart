@@ -21,6 +21,7 @@ class _SignupScreenState extends State<SignupScreen> {
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
   final _ageController = TextEditingController();
+  final _weightController = TextEditingController();
   final _addressController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
@@ -37,6 +38,7 @@ class _SignupScreenState extends State<SignupScreen> {
     _emailController.dispose();
     _phoneController.dispose();
     _ageController.dispose();
+    _weightController.dispose();
     _addressController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
@@ -194,24 +196,61 @@ class _SignupScreenState extends State<SignupScreen> {
                               height: Responsive.responsiveSpacing(context),
                             ),
 
+                            // Blood donation eligibility info
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.blue[50],
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.blue.shade200),
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Icon(
+                                    Icons.info_outline,
+                                    color: Colors.blue[700],
+                                    size: 20,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'রক্তদানের জন্য বয়স কমপক্ষে ১৮ বছর এবং ওজন কমপক্ষে ৫০ কেজি হতে হবে',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.blue[900],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            SizedBox(
+                              height: Responsive.responsiveSpacing(context),
+                            ),
+
                             Row(
                               children: [
                                 Expanded(
                                   child: _buildTextField(
                                     controller: _ageController,
                                     label: 'Age',
-                                    hint: 'Age',
+                                    hint: 'Age (minimum 18)',
                                     icon: Icons.cake_outlined,
                                     keyboardType: TextInputType.number,
                                     validator: (v) {
                                       if (v == null || v.isEmpty) {
-                                        return 'Required';
+                                        return 'Age is required';
                                       }
                                       final age = int.tryParse(v);
-                                      if (age == null ||
-                                          age < 18 ||
-                                          age > 100) {
-                                        return '18-100';
+                                      if (age == null) {
+                                        return 'Please enter valid age';
+                                      }
+                                      if (age < 18) {
+                                        return 'Minimum 18 years required';
+                                      }
+                                      if (age > 100) {
+                                        return 'Please enter valid age';
                                       }
                                       return null;
                                     },
@@ -306,6 +345,33 @@ class _SignupScreenState extends State<SignupScreen> {
                               icon: Icons.location_on_outlined,
                               validator: (v) =>
                                   v == null || v.isEmpty ? 'Required' : null,
+                            ),
+                            SizedBox(
+                              height: Responsive.responsiveSpacing(context),
+                            ),
+
+                            // Weight field (for blood donation eligibility)
+                            _buildTextField(
+                              controller: _weightController,
+                              label: 'Weight (kg)',
+                              hint: 'Enter your weight (minimum 50 kg)',
+                              icon: Icons.monitor_weight_outlined,
+                              keyboardType: TextInputType.number,
+                              validator: (v) {
+                                if (v == null || v.isEmpty) {
+                                  return 'Weight is required for blood donation';
+                                }
+                                final weight = double.tryParse(v);
+                                if (weight == null ||
+                                    weight < 30 ||
+                                    weight > 200) {
+                                  return 'Please enter valid weight (30-200 kg)';
+                                }
+                                if (weight < 50) {
+                                  return 'Minimum 50 kg required for blood donation';
+                                }
+                                return null;
+                              },
                             ),
                             SizedBox(
                               height: Responsive.responsiveSpacing(context),
@@ -730,10 +796,11 @@ class _SignupScreenState extends State<SignupScreen> {
     final password = _passwordController.text.trim();
     final name = _nameController.text.trim();
     final phone = _phoneController.text.trim();
-    final age = int.parse(_ageController.text.trim());
+    final age = int.tryParse(_ageController.text.trim()) ?? 18;
+    final weight = double.tryParse(_weightController.text.trim()) ?? 50.0;
     final address = _addressController.text.trim();
-    final gender = _selectedGender!;
-    final bloodType = _selectedBloodType!;
+    final gender = _selectedGender ?? 'Other';
+    final bloodType = _selectedBloodType ?? 'O+';
 
     final newUser = User(
       email: email,
@@ -743,6 +810,7 @@ class _SignupScreenState extends State<SignupScreen> {
       age: age,
       gender: gender,
       address: address,
+      weight: weight,
     );
 
     try {
@@ -785,6 +853,7 @@ class _SignupScreenState extends State<SignupScreen> {
         'bloodType': bloodType,
         'phone': phone,
         'age': age,
+        'weight': weight,
         'gender': gender,
         'address': address,
         'role': 'user',
@@ -810,6 +879,7 @@ class _SignupScreenState extends State<SignupScreen> {
             'bloodType': newUser.bloodType,
             'phone': newUser.phone,
             'age': newUser.age,
+            'weight': newUser.weight,
             'gender': newUser.gender,
             'address': newUser.address,
             'role': newUser.role.toString().split('.').last,

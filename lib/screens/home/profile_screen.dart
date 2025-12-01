@@ -15,7 +15,8 @@ class ProfileScreen extends StatefulWidget {
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen> {
+class _ProfileScreenState extends State<ProfileScreen>
+    with WidgetsBindingObserver {
   User? currentUser;
   List<Donation> donationHistory = [];
   int daysUntilNextDonation = 0;
@@ -39,15 +40,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadUserData();
     _loadDonationHistory();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _nameController.dispose();
     _phoneController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Reload data when user comes back to this screen
+      _loadUserData();
+      _loadDonationHistory();
+    }
   }
 
   Future<void> _loadUserData() async {
@@ -66,16 +78,40 @@ class _ProfileScreenState extends State<ProfileScreen> {
         return;
       }
 
+      // Force read from server to get latest data (not cache)
       final profile = await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
-          .get();
+          .get(const GetOptions(source: Source.server));
 
       if (!profile.exists) {
         throw Exception('User profile not found');
       }
 
       final data = profile.data() ?? {};
+
+      // Get stats and fix if needed
+      final totalDonations = data['totalDonations'] ?? 0;
+      var livesSaved = data['livesSaved'] ?? 0;
+
+      debugPrint('📊 Profile loading user data:');
+      debugPrint('   totalDonations: $totalDonations');
+      debugPrint('   livesSaved from DB: ${data['livesSaved']}');
+
+      // If livesSaved is 0 but totalDonations > 0, fix it
+      if (livesSaved == 0 && totalDonations > 0) {
+        livesSaved = totalDonations;
+
+        // Update Firebase
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .update({'livesSaved': totalDonations});
+
+        debugPrint('   ✅ Fixed livesSaved to: $livesSaved');
+      }
+
+      debugPrint('   Final livesSaved: $livesSaved');
 
       // Parse availability
       DonorAvailability avail = DonorAvailability.available;
@@ -94,8 +130,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         phone: data['phone'] ?? '',
         role: UserRole.user,
         availability: avail,
-        totalDonations: data['totalDonations'] ?? 0,
-        livesSaved: data['livesSaved'] ?? data['totalDonations'] ?? 0,
+        totalDonations: totalDonations,
+        livesSaved: livesSaved,
       );
 
       // Populate controllers and blood type
@@ -105,10 +141,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ? currentUser!.bloodType
           : 'A+';
 
+      debugPrint('👤 Profile UI update:');
+      debugPrint('   User: ${currentUser!.name}');
+      debugPrint('   Donations: ${currentUser!.totalDonations}');
+      debugPrint('   Lives Saved: ${currentUser!.livesSaved}');
+
       if (mounted) {
         setState(() {});
       }
     } catch (e) {
+      debugPrint('❌ Error loading profile: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

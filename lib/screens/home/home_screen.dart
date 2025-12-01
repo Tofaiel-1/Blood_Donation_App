@@ -8,6 +8,7 @@ import '../../widgets/themed_widgets.dart';
 import '../../widgets/notice_bar.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/responsive.dart';
+import '../../services/donation_stats_service.dart';
 import '../chat/chatbot_screen.dart';
 
 /// Redesigned HomeScreen with modern UI and themed widgets
@@ -147,10 +148,11 @@ class _HomeScreenState extends State<HomeScreen>
     try {
       final currentFirebaseUser = auth.FirebaseAuth.instance.currentUser;
       if (currentFirebaseUser != null) {
+        // Force read from server to get latest data
         final profile = await FirebaseFirestore.instance
             .collection('users')
             .doc(currentFirebaseUser.uid)
-            .get();
+            .get(const GetOptions(source: Source.server));
 
         if (profile.exists) {
           final data = profile.data() ?? {};
@@ -170,6 +172,11 @@ class _HomeScreenState extends State<HomeScreen>
               // Also update stats from user document
               _totalDonations = data['totalDonations'] ?? 0;
               _livesSaved = data['livesSaved'] ?? data['totalDonations'] ?? 0;
+
+              debugPrint('👤 User data loaded:');
+              debugPrint('   Name: ${_cachedUser?.name}');
+              debugPrint('   Total Donations: $_totalDonations');
+              debugPrint('   Lives Saved: $_livesSaved');
             });
           }
         }
@@ -202,7 +209,26 @@ class _HomeScreenState extends State<HomeScreen>
         if (userData != null) {
           // Get stats from user document
           final totalFromUser = userData['totalDonations'] ?? 0;
-          final livesFromUser = userData['livesSaved'] ?? totalFromUser;
+
+          // If livesSaved is 0 but totalDonations > 0, sync them
+          var livesFromUser = userData['livesSaved'] ?? 0;
+          if (livesFromUser == 0 && totalFromUser > 0) {
+            // Fix the data - lives saved should equal total donations
+            livesFromUser = totalFromUser;
+
+            // Update Firebase to fix this
+            await FirebaseFirestore.instance
+                .collection('users')
+                .doc(currentUser.uid)
+                .update({'livesSaved': totalFromUser});
+
+            debugPrint('✅ Fixed livesSaved: $totalFromUser (was 0)');
+          }
+
+          debugPrint('📊 Loading donation data:');
+          debugPrint('   totalDonations: $totalFromUser');
+          debugPrint('   livesSaved from DB: ${userData['livesSaved']}');
+          debugPrint('   livesSaved final: $livesFromUser');
 
           // Calculate days until next donation
           int daysUntilNext = 0;
@@ -956,9 +982,39 @@ class _HomeScreenState extends State<HomeScreen>
             'lastDonationDate': Timestamp.fromDate(data['date'] as DateTime),
           });
 
-      // Reload data to show updated stats
+      // Update global statistics (all users combined)
+      await DonationStatsService().incrementGlobalStats();
+
+      debugPrint('✅ Donation saved to Firebase');
+      debugPrint('   Incremented user totalDonations and livesSaved by 1');
+      debugPrint(
+        '   Incremented global totalDonations and totalLivesSaved by 1',
+      );
+
+      // Force a fresh read from server (not cache) to ensure stats are updated
+      final updatedUserDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUser.uid)
+          .get(const GetOptions(source: Source.server));
+
+      final updatedData = updatedUserDoc.data() ?? {};
+      final updatedTotal = updatedData['totalDonations'] ?? 0;
+      final updatedLives = updatedData['livesSaved'] ?? 0;
+
+      debugPrint('📊 Fresh data from server:');
+      debugPrint('   totalDonations: $updatedTotal');
+      debugPrint('   livesSaved: $updatedLives');
+
+      if (mounted) {
+        setState(() {
+          _totalDonations = updatedTotal;
+          _livesSaved = updatedLives;
+        });
+      }
+
+      // Also reload for next time
       await _loadDonationData();
-      await _loadUserData(); // Reload user profile with updated stats
+      await _loadUserData();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1528,7 +1584,11 @@ class _AddDonationDialogState extends State<_AddDonationDialog> {
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.lightbulb_outline, color: Colors.green[700], size: 18),
+                    Icon(
+                      Icons.lightbulb_outline,
+                      color: Colors.green[700],
+                      size: 18,
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(

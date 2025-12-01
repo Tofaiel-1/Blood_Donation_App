@@ -22,6 +22,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int _currentIndex = 0;
   User? currentUser;
   Key _homeScreenKey = UniqueKey();
+  Key _profileScreenKey = UniqueKey();
   final NotificationService _notificationService = NotificationService();
 
   void _changeTab(int index) {
@@ -29,6 +30,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       // Regenerate home screen key when switching back to home from profile
       if (index == 0 && _currentIndex == 4) {
         _homeScreenKey = UniqueKey();
+      }
+      // Regenerate profile screen key when switching to profile to reload data
+      if (index == 4) {
+        _profileScreenKey = UniqueKey();
       }
       _currentIndex = index;
     });
@@ -45,7 +50,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       SearchScreen(),
       DonateScreen(),
       MessagesScreen(),
-      const ProfileScreen(),
+      ProfileScreen(key: _profileScreenKey),
     ];
   }
 

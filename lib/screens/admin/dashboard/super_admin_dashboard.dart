@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../services/admin_service.dart';
 import '../../../../services/auth_service.dart';
+import '../../../../services/donation_stats_service.dart';
 import 'widgets/stat_card.dart';
 import 'widgets/control_panel_card.dart';
 import 'widgets/activity_log_list.dart';
@@ -78,10 +79,26 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
           .toSet()
           .length;
 
+      // Load global statistics
+      final globalStatsDoc = await FirebaseFirestore.instance
+          .collection('globalStats')
+          .doc('donations')
+          .get();
+
+      int globalDonations = donationCount; // fallback to count
+      int globalLivesSaved = donationCount; // fallback to count
+
+      if (globalStatsDoc.exists) {
+        final globalData = globalStatsDoc.data() ?? {};
+        globalDonations = globalData['totalDonations'] ?? donationCount;
+        globalLivesSaved = globalData['totalLivesSaved'] ?? donationCount;
+      }
+
       if (mounted) {
         setState(() {
           _stats = stats;
-          _stats['totalDonations'] = donationCount;
+          _stats['totalDonations'] = globalDonations; // Use global count
+          _stats['totalLivesSaved'] = globalLivesSaved; // Use global count
           _stats['totalOrgs'] = organizations;
           _bloodTypeDistribution = bloodDist;
           _isLoading = false;
@@ -139,6 +156,12 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
                     builder: (context) => const AppSettingsDialog(),
                   );
                   break;
+                case 'RecalculateStats':
+                  _recalculateGlobalStats(context);
+                  break;
+                case 'FixLivesSaved':
+                  _fixLivesSavedForAllUsers(context);
+                  break;
                 case 'Logout':
                   _showLogoutConfirmation(context);
                   break;
@@ -163,6 +186,26 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
                       Icon(Icons.settings, size: 20),
                       SizedBox(width: 8),
                       Text('Settings'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem<String>(
+                  value: 'RecalculateStats',
+                  child: Row(
+                    children: [
+                      Icon(Icons.calculate, size: 20, color: Colors.blue),
+                      SizedBox(width: 8),
+                      Text('Recalculate Stats'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem<String>(
+                  value: 'FixLivesSaved',
+                  child: Row(
+                    children: [
+                      Icon(Icons.healing, size: 20, color: Colors.orange),
+                      SizedBox(width: 8),
+                      Text('Fix Lives Saved'),
                     ],
                   ),
                 ),
@@ -429,6 +472,23 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
           onTap: () => _showDonationsList(context),
         ),
         StatCard(
+          title: 'Lives Saved',
+          value: (_stats['totalLivesSaved'] ?? _stats['totalDonations'] ?? 0)
+              .toString(),
+          icon: Icons.favorite,
+          color: Colors.pink,
+          onTap: () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  '${_stats['totalLivesSaved'] ?? _stats['totalDonations'] ?? 0} lives saved through blood donations! 🎉',
+                ),
+                backgroundColor: Colors.pink,
+              ),
+            );
+          },
+        ),
+        StatCard(
           title: 'Pending',
           value: _stats['pendingRequests'].toString(),
           icon: Icons.pending_actions,
@@ -527,6 +587,135 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
         ),
       ],
     );
+  }
+
+  Future<void> _recalculateGlobalStats(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.calculate, color: Colors.blue),
+            SizedBox(width: 8),
+            Text('Recalculate Stats'),
+          ],
+        ),
+        content: const Text(
+          'Recalculate global donation statistics from all completed donations?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Recalculate'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && context.mounted) {
+      try {
+        await DonationStatsService().recalculateGlobalStats();
+        await _loadData();
+
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('✅ Global statistics recalculated!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _fixLivesSavedForAllUsers(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.healing, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('Fix Lives Saved'),
+          ],
+        ),
+        content: const Text(
+          'This will fix all users where Lives Saved is 0 but they have donations.\n\n'
+          'Lives Saved will be set equal to Total Donations for affected users.\n\n'
+          'Continue?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Fix Now', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && context.mounted) {
+      final navigator = Navigator.of(context);
+      final messenger = ScaffoldMessenger.of(context);
+
+      // Show loading
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: Card(
+            child: Padding(
+              padding: EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Fixing users data...'),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      try {
+        final fixedCount = await DonationStatsService()
+            .fixMismatchedLivesSaved();
+
+        navigator.pop(); // Close loading
+
+        // Reload dashboard
+        await _loadData();
+
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('✅ Fixed $fixedCount users!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } catch (e) {
+        navigator.pop(); // Close loading
+        messenger.showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 
   void _showLogoutConfirmation(BuildContext context) {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/donation_center.dart';
 import '../../utils/app_colors.dart';
+import '../../services/donation_stats_service.dart';
 
 class AddDataScreen extends StatefulWidget {
   const AddDataScreen({super.key});
@@ -796,6 +797,9 @@ class _AddDataScreenState extends State<AddDataScreen>
         'notes': notes,
         'createdAt': FieldValue.serverTimestamp(),
       });
+
+      // Update global statistics
+      await DonationStatsService().incrementGlobalStats();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

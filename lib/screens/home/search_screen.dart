@@ -1,7 +1,9 @@
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart' as auth;
 import 'package:flutter/material.dart';
-import '../../models/search.dart';
+import '../../models/user.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -21,16 +23,16 @@ class _SearchScreenState extends State<SearchScreen> {
   double maxDistance = 50.0;
   bool availableOnly = true;
   bool isLoading = false;
-  List<SearchResult> searchResults = [];
-  Set<String> favoriteIds = {}; // store favorite donor ids
-  String sortBy = 'relevance'; // relevance | distance | lastDonation
+  List<User> searchResults = [];
+  Set<String> favoriteIds = {};
+  String sortBy = 'relevance';
   List<String> recentQueries = [];
+  String? currentUserLocation;
 
-  // Enhanced filter options
   bool isEmergencyMode = false;
-  String selectedUrgency = 'all'; // all, critical, urgent, normal
+  String selectedUrgency = 'all';
   bool showNearbyOnly = false;
-  String donorType = 'all'; // all, regular, volunteer, verified
+  String donorType = 'all';
 
   final List<String> bloodTypes = [
     'A+',
@@ -46,146 +48,329 @@ class _SearchScreenState extends State<SearchScreen> {
   @override
   void initState() {
     super.initState();
-    _loadMockData();
+    _loadDonorsFromFirebase();
     _searchController.addListener(_onSearchChanged);
+    _ensureDemoData();
   }
 
   void _onSearchChanged() {
     if (_debounce?.isActive ?? false) _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 450), () {
-      // perform search automatically for better UX
       if (_searchController.text.trim().isNotEmpty) {
         _performSearch();
       }
     });
   }
 
-  void _loadMockData() {
-    // Enhanced mock search results
-    searchResults = [
-      SearchResult(
-        id: '1',
-        name: 'Arif Shahriar',
-        bloodType: 'O+',
-        location: 'Dhaka Medical College',
-        distance: 2.5,
-        lastDonation: DateTime.now().subtract(Duration(days: 90)),
-        isAvailable: true,
-        phone: '+880123456789',
-        email: 'arif@example.com',
-      ),
-      SearchResult(
-        id: '2',
-        name: 'Sarah Ahmed',
-        bloodType: 'A+',
-        location: 'Chattogram Medical College',
-        distance: 5.2,
-        lastDonation: DateTime.now().subtract(Duration(days: 120)),
-        isAvailable: true,
-        phone: '+880918765432',
-      ),
-      SearchResult(
-        id: '3',
-        name: 'Rahman Khan',
-        bloodType: 'B-',
-        location: 'PSTU Health Center',
-        distance: 1.8,
-        lastDonation: DateTime.now().subtract(Duration(days: 90)),
-        isAvailable: false,
-        phone: '+880555666777',
-      ),
-      SearchResult(
-        id: '4',
-        name: 'Dr. Fatima Khatun',
-        bloodType: 'AB+',
-        location: 'BSMMU Hospital',
-        distance: 3.1,
-        lastDonation: DateTime.now().subtract(Duration(days: 45)),
-        isAvailable: true,
-        phone: '+880177889900',
-        email: 'fatima.dr@example.com',
-      ),
-      SearchResult(
-        id: '5',
-        name: 'Karim Ahmed',
-        bloodType: 'O-',
-        location: 'Apollo Hospital',
-        distance: 7.8,
-        lastDonation: DateTime.now().subtract(Duration(days: 200)),
-        isAvailable: true,
-        phone: '+880134567890',
-        email: 'karim.universal@example.com',
-      ),
-    ];
-    // ensure favorites persist in mock session
-    favoriteIds = {'1', '4'};
+  Future<void> _ensureDemoData() async {
+    try {
+      final usersSnapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .where('role', isEqualTo: 'user')
+          .limit(1)
+          .get();
+
+      if (usersSnapshot.docs.isEmpty) {
+        await _addDemoUsers();
+      }
+    } catch (e) {
+      debugPrint('Error checking demo data: $e');
+    }
   }
 
-  void _performSearch() {
-    setState(() {
-      isLoading = true;
-    });
+  Future<void> _addDemoUsers() async {
+    final demoUsers = [
+      {
+        'email': 'arif.shahriar@example.com',
+        'name': 'Arif Shahriar',
+        'bloodType': 'O+',
+        'phone': '+880123456789',
+        'role': 'user',
+        'age': 28,
+        'gender': 'Male',
+        'address': 'Dhaka Medical College, Dhaka',
+        'lastDonationDate': Timestamp.fromDate(
+          DateTime.now().subtract(Duration(days: 90)),
+        ),
+        'totalDonations': 8,
+        'livesSaved': 8,
+        'availability': 'available',
+        'weight': 68.5,
+        'isEligibleToDonate': true,
+        'createdAt': FieldValue.serverTimestamp(),
+      },
+      {
+        'email': 'sarah.ahmed@example.com',
+        'name': 'Sarah Ahmed',
+        'bloodType': 'A+',
+        'phone': '+880918765432',
+        'role': 'user',
+        'age': 25,
+        'gender': 'Female',
+        'address': 'Chattogram Medical College, Chattogram',
+        'lastDonationDate': Timestamp.fromDate(
+          DateTime.now().subtract(Duration(days: 130)),
+        ),
+        'totalDonations': 5,
+        'livesSaved': 5,
+        'availability': 'available',
+        'weight': 55.0,
+        'isEligibleToDonate': true,
+        'createdAt': FieldValue.serverTimestamp(),
+      },
+      {
+        'email': 'rahman.khan@example.com',
+        'name': 'Rahman Khan',
+        'bloodType': 'B-',
+        'phone': '+880555666777',
+        'role': 'user',
+        'age': 32,
+        'gender': 'Male',
+        'address': 'PSTU Health Center, Dumki',
+        'lastDonationDate': Timestamp.fromDate(
+          DateTime.now().subtract(Duration(days: 90)),
+        ),
+        'totalDonations': 12,
+        'livesSaved': 12,
+        'availability': 'busy',
+        'weight': 75.0,
+        'isEligibleToDonate': true,
+        'createdAt': FieldValue.serverTimestamp(),
+      },
+      {
+        'email': 'fatima.khatun@example.com',
+        'name': 'Dr. Fatima Khatun',
+        'bloodType': 'AB+',
+        'phone': '+880177889900',
+        'role': 'user',
+        'age': 35,
+        'gender': 'Female',
+        'address': 'BSMMU Hospital, Dhaka',
+        'lastDonationDate': Timestamp.fromDate(
+          DateTime.now().subtract(Duration(days: 45)),
+        ),
+        'totalDonations': 15,
+        'livesSaved': 15,
+        'availability': 'available',
+        'weight': 58.0,
+        'isEligibleToDonate': false,
+        'createdAt': FieldValue.serverTimestamp(),
+      },
+      {
+        'email': 'karim.ahmed@example.com',
+        'name': 'Karim Ahmed',
+        'bloodType': 'O-',
+        'phone': '+880134567890',
+        'role': 'user',
+        'age': 30,
+        'gender': 'Male',
+        'address': 'Apollo Hospital, Dhaka',
+        'lastDonationDate': Timestamp.fromDate(
+          DateTime.now().subtract(Duration(days: 200)),
+        ),
+        'totalDonations': 25,
+        'livesSaved': 25,
+        'availability': 'available',
+        'weight': 72.0,
+        'isEligibleToDonate': true,
+        'createdAt': FieldValue.serverTimestamp(),
+      },
+      {
+        'email': 'nabila.islam@example.com',
+        'name': 'Nabila Islam',
+        'bloodType': 'A-',
+        'phone': '+880166778899',
+        'role': 'user',
+        'age': 27,
+        'gender': 'Female',
+        'address': 'Square Hospital, Dhaka',
+        'lastDonationDate': Timestamp.fromDate(
+          DateTime.now().subtract(Duration(days: 150)),
+        ),
+        'totalDonations': 6,
+        'livesSaved': 6,
+        'availability': 'available',
+        'weight': 52.0,
+        'isEligibleToDonate': true,
+        'createdAt': FieldValue.serverTimestamp(),
+      },
+      {
+        'email': 'tanvir.hasan@example.com',
+        'name': 'Tanvir Hasan',
+        'bloodType': 'B+',
+        'phone': '+880199887766',
+        'role': 'user',
+        'age': 29,
+        'gender': 'Male',
+        'address': 'Rajshahi Medical College, Rajshahi',
+        'lastDonationDate': Timestamp.fromDate(
+          DateTime.now().subtract(Duration(days: 180)),
+        ),
+        'totalDonations': 10,
+        'livesSaved': 10,
+        'availability': 'available',
+        'weight': 80.0,
+        'isEligibleToDonate': true,
+        'createdAt': FieldValue.serverTimestamp(),
+      },
+      {
+        'email': 'maliha.tabassum@example.com',
+        'name': 'Maliha Tabassum',
+        'bloodType': 'AB-',
+        'phone': '+880155443322',
+        'role': 'user',
+        'age': 26,
+        'gender': 'Female',
+        'address': 'Sylhet MAG Osmani Medical College',
+        'lastDonationDate': Timestamp.fromDate(
+          DateTime.now().subtract(Duration(days: 100)),
+        ),
+        'totalDonations': 4,
+        'livesSaved': 4,
+        'availability': 'available',
+        'weight': 54.0,
+        'isEligibleToDonate': true,
+        'createdAt': FieldValue.serverTimestamp(),
+      },
+    ];
 
-    // Simulate API call delay
-    Future.delayed(const Duration(milliseconds: 700), () {
+    final batch = FirebaseFirestore.instance.batch();
+    for (var userData in demoUsers) {
+      final docRef = FirebaseFirestore.instance.collection('users').doc();
+      userData['id'] = docRef.id;
+      batch.set(docRef, userData);
+    }
+    await batch.commit();
+    debugPrint('✅ Demo users added successfully');
+  }
+
+  Future<void> _loadDonorsFromFirebase() async {
+    setState(() => isLoading = true);
+
+    try {
+      final currentUser = auth.FirebaseAuth.instance.currentUser;
+      if (currentUser != null) {
+        final userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(currentUser.uid)
+            .get();
+        if (userDoc.exists) {
+          currentUserLocation = userDoc.data()?['address'] ?? 'Dhaka';
+        }
+      }
+
+      final querySnapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .where('role', isEqualTo: 'user')
+          .get();
+
       setState(() {
-        isLoading = false;
-        // Filter mock data based on search criteria
-        final query = _searchController.text.toLowerCase().trim();
-        final locationQuery = _locationController.text.toLowerCase().trim();
-
-        // save recent query
-        if (query.isNotEmpty) {
-          recentQueries.remove(query);
-          recentQueries.insert(0, query);
-          if (recentQueries.length > 6) recentQueries.removeLast();
-        }
-
-        searchResults = searchResults.where((result) {
-          bool matchesBloodType =
-              selectedBloodType == null ||
-              result.bloodType == selectedBloodType;
-          bool matchesDistance = result.distance <= maxDistance;
-          bool matchesAvailability = !availableOnly || result.isAvailable;
-
-          bool matchesText =
-              query.isEmpty ||
-              result.name.toLowerCase().contains(query) ||
-              result.bloodType.toLowerCase().contains(query);
-
-          bool matchesLocation =
-              locationQuery.isEmpty ||
-              result.location.toLowerCase().contains(locationQuery);
-
-          return matchesBloodType &&
-              matchesDistance &&
-              matchesAvailability &&
-              matchesText &&
-              matchesLocation;
+        searchResults = querySnapshot.docs.map((doc) {
+          final data = doc.data();
+          data['id'] = doc.id;
+          return User.fromMap(data);
         }).toList();
-
-        // Apply sorting
-        if (sortBy == 'distance') {
-          searchResults.sort((a, b) => a.distance.compareTo(b.distance));
-        } else if (sortBy == 'lastDonation') {
-          searchResults.sort(
-            (a, b) => b.lastDonation.compareTo(a.lastDonation),
-          );
-        } else if (sortBy == 'favorites') {
-          searchResults.sort((a, b) {
-            final aFav = favoriteIds.contains(a.id) ? 0 : 1;
-            final bFav = favoriteIds.contains(b.id) ? 0 : 1;
-            return aFav.compareTo(bFav);
-          });
-        }
+        isLoading = false;
       });
-    });
+    } catch (e) {
+      debugPrint('Error loading donors: $e');
+      setState(() => isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error loading donors: $e')));
+      }
+    }
+  }
+
+  Future<void> _performSearch() async {
+    setState(() => isLoading = true);
+
+    try {
+      final query = _searchController.text.toLowerCase().trim();
+      final locationQuery = _locationController.text.toLowerCase().trim();
+
+      if (query.isNotEmpty) {
+        recentQueries.remove(query);
+        recentQueries.insert(0, query);
+        if (recentQueries.length > 6) recentQueries.removeLast();
+      }
+
+      Query<Map<String, dynamic>> firestoreQuery = FirebaseFirestore.instance
+          .collection('users')
+          .where('role', isEqualTo: 'user');
+
+      if (selectedBloodType != null) {
+        firestoreQuery = firestoreQuery.where(
+          'bloodType',
+          isEqualTo: selectedBloodType,
+        );
+      }
+
+      if (availableOnly) {
+        firestoreQuery = firestoreQuery.where(
+          'availability',
+          isEqualTo: 'available',
+        );
+      }
+
+      final querySnapshot = await firestoreQuery.get();
+
+      List<User> results = querySnapshot.docs.map((doc) {
+        final data = doc.data();
+        data['id'] = doc.id;
+        return User.fromMap(data);
+      }).toList();
+
+      results = results.where((user) {
+        bool matchesText =
+            query.isEmpty ||
+            user.name.toLowerCase().contains(query) ||
+            user.bloodType.toLowerCase().contains(query) ||
+            (user.phone?.toLowerCase().contains(query) ?? false);
+
+        bool matchesLocation =
+            locationQuery.isEmpty ||
+            (user.address?.toLowerCase().contains(locationQuery) ?? false);
+
+        return matchesText && matchesLocation;
+      }).toList();
+
+      if (sortBy == 'lastDonation') {
+        results.sort((a, b) {
+          if (a.lastDonationDate == null && b.lastDonationDate == null)
+            return 0;
+          if (a.lastDonationDate == null) return 1;
+          if (b.lastDonationDate == null) return -1;
+          return b.lastDonationDate!.compareTo(a.lastDonationDate!);
+        });
+      } else if (sortBy == 'favorites') {
+        results.sort((a, b) {
+          final aFav = favoriteIds.contains(a.id) ? 0 : 1;
+          final bFav = favoriteIds.contains(b.id) ? 0 : 1;
+          return aFav.compareTo(bFav);
+        });
+      } else if (sortBy == 'donations') {
+        results.sort((a, b) => b.totalDonations.compareTo(a.totalDonations));
+      }
+
+      setState(() {
+        searchResults = results;
+        isLoading = false;
+      });
+    } catch (e) {
+      debugPrint('Search error: $e');
+      setState(() => isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Search failed: $e')));
+      }
+    }
   }
 
   Future<void> _refreshResults() async {
-    setState(() => isLoading = true);
-    await Future.delayed(Duration(milliseconds: 800));
-    _performSearch();
+    await _loadDonorsFromFirebase();
   }
 
   void _toggleFavorite(String id) {
@@ -198,7 +383,7 @@ class _SearchScreenState extends State<SearchScreen> {
     });
   }
 
-  void _showDetailSheet(SearchResult result) {
+  void _showDetailSheet(User donor) {
     showModalBottomSheet(
       context: context,
       shape: RoundedRectangleBorder(
@@ -214,31 +399,30 @@ class _SearchScreenState extends State<SearchScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  result.name,
+                  donor.name,
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
                 IconButton(
                   icon: Icon(
-                    favoriteIds.contains(result.id)
+                    favoriteIds.contains(donor.id)
                         ? Icons.favorite
                         : Icons.favorite_border,
                     color: Colors.red[700],
                   ),
                   onPressed: () {
-                    _toggleFavorite(result.id);
+                    _toggleFavorite(donor.id ?? '');
                     Navigator.of(context).pop();
                   },
                 ),
               ],
             ),
             SizedBox(height: 8),
-            Text('Blood Type: ${result.bloodType}'),
-            Text('Location: ${result.location}'),
-            Text('Distance: ${result.distance.toStringAsFixed(1)} km'),
+            Text('Blood Type: ${donor.bloodType}'),
+            Text('Location: ${donor.address ?? 'N/A'}'),
+            Text('Total Donations: ${donor.totalDonations}'),
             SizedBox(height: 8),
-            Text('Phone: ${result.phone}'),
-            SizedBox(height: 8),
-            Text('Email: ${result.email ?? 'N/A'}'),
+            Text('Phone: ${donor.phone ?? 'N/A'}'),
+            Text('Email: ${donor.email}'),
             SizedBox(height: 12),
             Row(
               children: [
@@ -248,7 +432,7 @@ class _SearchScreenState extends State<SearchScreen> {
                     label: Text('Call'),
                     onPressed: () {
                       Navigator.of(context).pop();
-                      _callDonor(result.phone);
+                      _callDonor(donor.phone ?? '');
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.red[700],
@@ -261,51 +445,16 @@ class _SearchScreenState extends State<SearchScreen> {
                   child: OutlinedButton.icon(
                     icon: Icon(Icons.message),
                     label: Text('Message'),
-                    onPressed: result.isAvailable
+                    onPressed: donor.availability == DonorAvailability.available
                         ? () {
                             Navigator.of(context).pop();
-                            _sendMessage(result);
+                            _sendMessage(donor);
                           }
                         : null,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                      // placeholder for map integration
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Open map for ${result.location}'),
-                        ),
-                      );
-                    },
-                    icon: Icon(Icons.map),
-                    label: Text('Map'),
-                  ),
-                ),
-                SizedBox(width: 12),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                      // share contact placeholder
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Share ${result.name}')),
-                      );
-                    },
-                    icon: Icon(Icons.share),
-                    label: Text('Share'),
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: 12),
           ],
         ),
       ),
@@ -340,8 +489,6 @@ class _SearchScreenState extends State<SearchScreen> {
                 ],
               ),
               SizedBox(height: 20),
-
-              // Blood Type Filter
               Text(
                 'Blood Type',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -364,10 +511,7 @@ class _SearchScreenState extends State<SearchScreen> {
                     )
                     .toList(),
               ),
-
               SizedBox(height: 20),
-
-              // Distance Filter
               Text(
                 'Maximum Distance: ${maxDistance.round()} km',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -378,103 +522,20 @@ class _SearchScreenState extends State<SearchScreen> {
                 max: 100,
                 divisions: 99,
                 onChanged: (value) {
-                  setModalState(() {
-                    maxDistance = value;
-                  });
+                  setModalState(() => maxDistance = value);
                 },
                 activeColor: Colors.red[700],
               ),
-
               SizedBox(height: 20),
-
-              // Availability Filter
               SwitchListTile(
                 title: Text('Available donors only'),
                 value: availableOnly,
                 onChanged: (value) {
-                  setModalState(() {
-                    availableOnly = value;
-                  });
+                  setModalState(() => availableOnly = value);
                 },
                 activeColor: Colors.red[700],
               ),
-
-              // Donor Type Filter
-              SizedBox(height: 15),
-              Text(
-                'Donor Type',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              SizedBox(height: 10),
-              Wrap(
-                spacing: 8,
-                children: [
-                  FilterChip(
-                    label: Text('All'),
-                    selected: donorType == 'all',
-                    onSelected: (selected) {
-                      setModalState(() {
-                        donorType = 'all';
-                      });
-                    },
-                    selectedColor: Colors.red[200],
-                  ),
-                  FilterChip(
-                    label: Text('Verified'),
-                    selected: donorType == 'verified',
-                    onSelected: (selected) {
-                      setModalState(() {
-                        donorType = selected ? 'verified' : 'all';
-                      });
-                    },
-                    selectedColor: Colors.blue[200],
-                  ),
-                  FilterChip(
-                    label: Text('Regular'),
-                    selected: donorType == 'regular',
-                    onSelected: (selected) {
-                      setModalState(() {
-                        donorType = selected ? 'regular' : 'all';
-                      });
-                    },
-                    selectedColor: Colors.green[200],
-                  ),
-                ],
-              ),
-
-              // Urgency Filter
-              SizedBox(height: 20),
-              Text(
-                'Urgency Level',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              SizedBox(height: 10),
-              DropdownButtonFormField<String>(
-                value: selectedUrgency,
-                items: [
-                  DropdownMenuItem(value: 'all', child: Text('All Requests')),
-                  DropdownMenuItem(
-                    value: 'critical',
-                    child: Text('Critical Only'),
-                  ),
-                  DropdownMenuItem(value: 'urgent', child: Text('Urgent Only')),
-                  DropdownMenuItem(value: 'normal', child: Text('Normal Only')),
-                ],
-                onChanged: (value) {
-                  setModalState(() {
-                    selectedUrgency = value ?? 'all';
-                  });
-                },
-                decoration: InputDecoration(
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-              ),
-
               Spacer(),
-
-              // Reset and Apply Buttons
               Row(
                 children: [
                   Expanded(
@@ -486,15 +547,8 @@ class _SearchScreenState extends State<SearchScreen> {
                           availableOnly = true;
                           donorType = 'all';
                           selectedUrgency = 'all';
-                          showNearbyOnly = false;
-                          isEmergencyMode = false;
                         });
                       },
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.grey[700],
-                        side: BorderSide(color: Colors.grey[400]!),
-                        padding: EdgeInsets.symmetric(vertical: 15),
-                      ),
                       child: Text('Reset'),
                     ),
                   ),
@@ -503,18 +557,15 @@ class _SearchScreenState extends State<SearchScreen> {
                     flex: 2,
                     child: ElevatedButton(
                       onPressed: () {
+                        setState(() {});
                         Navigator.pop(context);
                         _performSearch();
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.red[700],
                         foregroundColor: Colors.white,
-                        padding: EdgeInsets.symmetric(vertical: 15),
                       ),
-                      child: Text(
-                        'Apply Filters',
-                        style: TextStyle(fontSize: 16),
-                      ),
+                      child: Text('Apply Filters'),
                     ),
                   ),
                 ],
@@ -544,7 +595,6 @@ class _SearchScreenState extends State<SearchScreen> {
       ),
       body: Column(
         children: [
-          // Search Bar
           Container(
             padding: EdgeInsets.all(16),
             color: Colors.red[50],
@@ -554,22 +604,11 @@ class _SearchScreenState extends State<SearchScreen> {
                   children: [
                     Expanded(
                       child: TextField(
-                        focusNode: _searchFocus,
                         controller: _searchController,
+                        focusNode: _searchFocus,
                         decoration: InputDecoration(
                           hintText: 'Search by name, hospital or blood type...',
                           prefixIcon: Icon(Icons.search),
-                          suffixIcon: _searchController.text.isNotEmpty
-                              ? IconButton(
-                                  icon: Icon(Icons.clear),
-                                  onPressed: () {
-                                    _searchController.clear();
-                                    setState(() {
-                                      searchResults = [];
-                                    });
-                                  },
-                                )
-                              : null,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
                             borderSide: BorderSide.none,
@@ -577,16 +616,11 @@ class _SearchScreenState extends State<SearchScreen> {
                           filled: true,
                           fillColor: Colors.white,
                         ),
-                        onSubmitted: (_) => _performSearch(),
                       ),
                     ),
                     SizedBox(width: 8),
                     IconButton(
-                      onPressed: () {
-                        if (_searchController.text.trim().isNotEmpty) {
-                          _performSearch();
-                        }
-                      },
+                      onPressed: _performSearch,
                       icon: Icon(Icons.search, color: Colors.red[700]),
                     ),
                   ],
@@ -605,170 +639,6 @@ class _SearchScreenState extends State<SearchScreen> {
                     fillColor: Colors.white,
                   ),
                 ),
-
-                // Emergency Mode Toggle
-                SizedBox(height: 12),
-                Container(
-                  padding: EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: isEmergencyMode ? Colors.red[50] : Colors.grey[50],
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: isEmergencyMode
-                          ? Colors.red[200]!
-                          : Colors.grey[200]!,
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.emergency,
-                        color: isEmergencyMode
-                            ? Colors.red[700]
-                            : Colors.grey[600],
-                        size: 20,
-                      ),
-                      SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Emergency Mode - Find donors faster',
-                          style: TextStyle(
-                            color: isEmergencyMode
-                                ? Colors.red[700]
-                                : Colors.grey[700],
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                      Switch(
-                        value: isEmergencyMode,
-                        onChanged: (value) {
-                          setState(() {
-                            isEmergencyMode = value;
-                            if (value) {
-                              availableOnly = true;
-                              maxDistance = 20;
-                              sortBy = 'distance';
-                            }
-                          });
-                          _performSearch();
-                        },
-                        activeColor: Colors.red[700],
-                      ),
-                    ],
-                  ),
-                ),
-
-                // Quick Filters
-                SizedBox(height: 12),
-                Text(
-                  'Quick Filters',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: Colors.grey[700],
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                SizedBox(height: 6),
-                SizedBox(
-                  height: 36,
-                  child: ListView(
-                    scrollDirection: Axis.horizontal,
-                    children: [
-                      _buildQuickFilterChip(
-                        'Nearby (10km)',
-                        showNearbyOnly,
-                        () {
-                          setState(() {
-                            showNearbyOnly = !showNearbyOnly;
-                            if (showNearbyOnly) maxDistance = 10;
-                          });
-                          _performSearch();
-                        },
-                      ),
-                      SizedBox(width: 8),
-                      _buildQuickFilterChip(
-                        'O+ Universal',
-                        selectedBloodType == 'O+',
-                        () {
-                          setState(() {
-                            selectedBloodType = selectedBloodType == 'O+'
-                                ? null
-                                : 'O+';
-                          });
-                          _performSearch();
-                        },
-                      ),
-                      SizedBox(width: 8),
-                      _buildQuickFilterChip(
-                        'O- Universal',
-                        selectedBloodType == 'O-',
-                        () {
-                          setState(() {
-                            selectedBloodType = selectedBloodType == 'O-'
-                                ? null
-                                : 'O-';
-                          });
-                          _performSearch();
-                        },
-                      ),
-                      SizedBox(width: 8),
-                      _buildQuickFilterChip('Available Now', availableOnly, () {
-                        setState(() {
-                          availableOnly = !availableOnly;
-                        });
-                        _performSearch();
-                      }),
-                      SizedBox(width: 8),
-                      _buildQuickFilterChip(
-                        'Verified Donors',
-                        donorType == 'verified',
-                        () {
-                          setState(() {
-                            donorType = donorType == 'verified'
-                                ? 'all'
-                                : 'verified';
-                          });
-                          _performSearch();
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-
-                if (recentQueries.isNotEmpty) ...[
-                  SizedBox(height: 12),
-                  Text(
-                    'Recent Searches',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.grey[600],
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  SizedBox(height: 6),
-                  SizedBox(
-                    height: 32,
-                    child: ListView(
-                      scrollDirection: Axis.horizontal,
-                      children: recentQueries.map((q) {
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 8.0),
-                          child: ActionChip(
-                            label: Text(q, style: TextStyle(fontSize: 12)),
-                            onPressed: () {
-                              _searchController.text = q;
-                              _performSearch();
-                              _searchFocus.unfocus();
-                            },
-                            backgroundColor: Colors.white,
-                            side: BorderSide(color: Colors.grey[300]!),
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  ),
-                ],
                 SizedBox(height: 10),
                 Row(
                   children: [
@@ -778,27 +648,32 @@ class _SearchScreenState extends State<SearchScreen> {
                         items: [
                           DropdownMenuItem(
                             value: 'relevance',
-                            child: Text('Sort: Relevance'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'distance',
-                            child: Text('Sort: Distance'),
+                            child: Text('Relevance'),
                           ),
                           DropdownMenuItem(
                             value: 'lastDonation',
-                            child: Text('Sort: Recent Donors'),
+                            child: Text('Last Donation'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'donations',
+                            child: Text('Most Donations'),
                           ),
                           DropdownMenuItem(
                             value: 'favorites',
-                            child: Text('Sort: Favorites'),
+                            child: Text('Favorites'),
                           ),
                         ],
-                        onChanged: (v) =>
-                            setState(() => sortBy = v ?? 'relevance'),
+                        onChanged: (value) {
+                          setState(() => sortBy = value ?? 'relevance');
+                          _performSearch();
+                        },
                         decoration: InputDecoration(
+                          labelText: 'Sort by',
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
                           ),
+                          filled: true,
+                          fillColor: Colors.white,
                         ),
                       ),
                     ),
@@ -806,28 +681,6 @@ class _SearchScreenState extends State<SearchScreen> {
                     IconButton(
                       icon: Icon(Icons.refresh, color: Colors.red[700]),
                       onPressed: _refreshResults,
-                    ),
-                    SizedBox(width: 8),
-                    PopupMenuButton<String>(
-                      icon: Icon(Icons.more_vert, color: Colors.red[700]),
-                      onSelected: (v) {
-                        if (v == 'clear') {
-                          setState(() {
-                            selectedBloodType = null;
-                            maxDistance = 50;
-                            availableOnly = true;
-                            _searchController.clear();
-                            _locationController.clear();
-                            searchResults = [];
-                          });
-                        }
-                      },
-                      itemBuilder: (c) => [
-                        PopupMenuItem(
-                          value: 'clear',
-                          child: Text('Clear filters'),
-                        ),
-                      ],
                     ),
                   ],
                 ),
@@ -842,15 +695,20 @@ class _SearchScreenState extends State<SearchScreen> {
                       padding: EdgeInsets.symmetric(vertical: 15),
                     ),
                     child: isLoading
-                        ? CircularProgressIndicator(color: Colors.white)
+                        ? SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
                         : Text('Search Donors'),
                   ),
                 ),
               ],
             ),
           ),
-
-          // Search Results
           Expanded(
             child: RefreshIndicator(
               onRefresh: _refreshResults,
@@ -871,25 +729,24 @@ class _SearchScreenState extends State<SearchScreen> {
                         SizedBox(height: 120),
                         Center(
                           child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Icon(
                                 Icons.search_off,
                                 size: 64,
-                                color: Colors.grey,
+                                color: Colors.grey[400],
                               ),
                               SizedBox(height: 16),
                               Text(
                                 'No donors found',
                                 style: TextStyle(
                                   fontSize: 18,
-                                  color: Colors.grey,
+                                  color: Colors.grey[600],
                                 ),
                               ),
                               SizedBox(height: 8),
                               Text(
                                 'Try adjusting your search filters',
-                                style: TextStyle(color: Colors.grey),
+                                style: TextStyle(color: Colors.grey[500]),
                               ),
                             ],
                           ),
@@ -900,8 +757,8 @@ class _SearchScreenState extends State<SearchScreen> {
                       padding: EdgeInsets.all(16),
                       itemCount: searchResults.length,
                       itemBuilder: (context, index) {
-                        final result = searchResults[index];
-                        return _buildSearchResultCard(result);
+                        final donor = searchResults[index];
+                        return _buildSearchResultCard(donor);
                       },
                     ),
             ),
@@ -911,11 +768,8 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  Widget _buildSearchResultCard(SearchResult result) {
-    final daysSinceLastDonation = DateTime.now()
-        .difference(result.lastDonation)
-        .inDays;
-    final isEligible = daysSinceLastDonation >= 120; // 120 days gap required
+  Widget _buildSearchResultCard(User donor) {
+    final isEligible = donor.canDonateNow;
 
     return Card(
       margin: EdgeInsets.only(bottom: 12),
@@ -924,9 +778,9 @@ class _SearchScreenState extends State<SearchScreen> {
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
-          gradient: result.isAvailable
+          gradient: donor.availability == DonorAvailability.available
               ? LinearGradient(
-                  colors: [Colors.white, Colors.green[25]!],
+                  colors: [Colors.white, Colors.green[50]!],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 )
@@ -939,40 +793,38 @@ class _SearchScreenState extends State<SearchScreen> {
             children: [
               Row(
                 children: [
-                  // Enhanced Blood Type Badge
                   Container(
                     padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
-                        colors: [Colors.red[600]!, Colors.red[800]!],
+                        colors: [Colors.red[700]!, Colors.red[900]!],
                       ),
-                      borderRadius: BorderRadius.circular(25),
+                      borderRadius: BorderRadius.circular(20),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.red[200]!,
-                          blurRadius: 4,
+                          color: Colors.red.withAlpha(76),
+                          blurRadius: 8,
                           offset: Offset(0, 2),
                         ),
                       ],
                     ),
                     child: Text(
-                      result.bloodType,
+                      donor.bloodType,
                       style: TextStyle(
-                        fontWeight: FontWeight.bold,
                         color: Colors.white,
-                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
                       ),
                     ),
                   ),
-
-                  // Verification Badge (if verified donor)
-                  if (donorType == 'verified' || result.id == '4') ...[
+                  if (donor.totalDonations >= 5) ...[
                     SizedBox(width: 8),
                     Container(
                       padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
                         color: Colors.blue[100],
                         borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.blue[700]!),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -980,93 +832,91 @@ class _SearchScreenState extends State<SearchScreen> {
                           Icon(
                             Icons.verified,
                             size: 14,
-                            color: Colors.blue[800],
+                            color: Colors.blue[700],
                           ),
                           SizedBox(width: 4),
                           Text(
                             'Verified',
                             style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.blue[800],
+                              fontSize: 11,
+                              color: Colors.blue[700],
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                         ],
                       ),
                     ),
                   ],
-
                   Spacer(),
-
-                  // Favorite Button
                   GestureDetector(
-                    onTap: () => _toggleFavorite(result.id),
+                    onTap: () => _toggleFavorite(donor.id ?? ''),
                     child: Container(
                       padding: EdgeInsets.all(6),
                       decoration: BoxDecoration(
-                        color: favoriteIds.contains(result.id)
+                        color: favoriteIds.contains(donor.id)
                             ? Colors.red[50]
                             : Colors.grey[100],
-                        shape: BoxShape.circle,
+                        borderRadius: BorderRadius.circular(20),
                       ),
                       child: Icon(
-                        favoriteIds.contains(result.id)
+                        favoriteIds.contains(donor.id)
                             ? Icons.favorite
                             : Icons.favorite_border,
-                        color: favoriteIds.contains(result.id)
+                        color: favoriteIds.contains(donor.id)
                             ? Colors.red[700]
-                            : Colors.grey[600],
+                            : Colors.grey[400],
                         size: 20,
                       ),
                     ),
                   ),
                 ],
               ),
-
               SizedBox(height: 12),
-
-              // Donor Name & Status
               Row(
                 children: [
                   Expanded(
                     child: Text(
-                      result.name,
+                      donor.name,
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
-                        color: Colors.grey[800],
                       ),
                     ),
                   ),
                   Container(
                     padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      color: result.isAvailable
+                      color: donor.availability == DonorAvailability.available
                           ? Colors.green[100]
-                          : Colors.orange[100],
+                          : Colors.grey[200],
                       borderRadius: BorderRadius.circular(15),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
-                          result.isAvailable
-                              ? Icons.check_circle
-                              : Icons.schedule,
-                          size: 14,
-                          color: result.isAvailable
+                          Icons.circle,
+                          size: 8,
+                          color:
+                              donor.availability == DonorAvailability.available
                               ? Colors.green[700]
-                              : Colors.orange[700],
+                              : Colors.grey[500],
                         ),
                         SizedBox(width: 4),
                         Text(
-                          result.isAvailable ? 'Available' : 'Busy',
+                          donor.availability == DonorAvailability.available
+                              ? 'Available'
+                              : donor.availability == DonorAvailability.busy
+                              ? 'Busy'
+                              : 'Unavailable',
                           style: TextStyle(
-                            color: result.isAvailable
-                                ? Colors.green[800]
-                                : Colors.orange[800],
                             fontSize: 12,
-                            fontWeight: FontWeight.bold,
+                            fontWeight: FontWeight.w600,
+                            color:
+                                donor.availability ==
+                                    DonorAvailability.available
+                                ? Colors.green[700]
+                                : Colors.grey[700],
                           ),
                         ),
                       ],
@@ -1074,17 +924,14 @@ class _SearchScreenState extends State<SearchScreen> {
                   ),
                 ],
               ),
-
               SizedBox(height: 10),
-
-              // Location & Distance
               Row(
                 children: [
                   Icon(Icons.location_on, size: 16, color: Colors.red[400]),
                   SizedBox(width: 4),
                   Expanded(
                     child: Text(
-                      result.location,
+                      donor.address ?? 'Location not specified',
                       style: TextStyle(color: Colors.grey[700], fontSize: 14),
                     ),
                   ),
@@ -1095,64 +942,62 @@ class _SearchScreenState extends State<SearchScreen> {
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
-                      '${result.distance.toStringAsFixed(1)} km',
+                      '${donor.totalDonations} donations',
                       style: TextStyle(
-                        color: Colors.blue[800],
-                        fontSize: 12,
+                        fontSize: 11,
+                        color: Colors.blue[700],
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
                 ],
               ),
-
               SizedBox(height: 8),
-
-              // Last Donation & Eligibility
               Row(
                 children: [
                   Icon(Icons.access_time, size: 16, color: Colors.grey[500]),
                   SizedBox(width: 4),
                   Text(
-                    'Last donation: ${_formatDate(result.lastDonation)}',
+                    donor.lastDonationDate != null
+                        ? 'Last donation: ${_formatDate(donor.lastDonationDate!)}'
+                        : 'No donations yet',
                     style: TextStyle(color: Colors.grey[600], fontSize: 12),
                   ),
                   Spacer(),
                   Container(
                     padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
-                      color: isEligible ? Colors.green[50] : Colors.red[50],
+                      color: isEligible
+                          ? Colors.green[100]
+                          : Colors.orange[100],
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
-                      isEligible ? 'Eligible' : 'Not eligible yet',
+                      isEligible ? 'Eligible' : 'Not Eligible',
                       style: TextStyle(
-                        color: isEligible ? Colors.green[700] : Colors.red[700],
                         fontSize: 10,
-                        fontWeight: FontWeight.bold,
+                        color: isEligible
+                            ? Colors.green[700]
+                            : Colors.orange[700],
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
                 ],
               ),
-
               SizedBox(height: 16),
-
-              // Action Buttons
               Row(
                 children: [
                   Expanded(
                     flex: 2,
                     child: ElevatedButton.icon(
-                      onPressed: () => _callDonor(result.phone),
                       icon: Icon(Icons.phone, size: 16),
                       label: Text('Call'),
+                      onPressed: () => _callDonor(donor.phone ?? ''),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.red[700],
                         foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
+                        padding: EdgeInsets.symmetric(vertical: 10),
                       ),
                     ),
                   ),
@@ -1160,17 +1005,15 @@ class _SearchScreenState extends State<SearchScreen> {
                   Expanded(
                     flex: 2,
                     child: OutlinedButton.icon(
-                      onPressed: result.isAvailable
-                          ? () => _sendMessage(result)
-                          : null,
                       icon: Icon(Icons.message, size: 16),
                       label: Text('Message'),
+                      onPressed:
+                          donor.availability == DonorAvailability.available
+                          ? () => _sendMessage(donor)
+                          : null,
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.red[700],
-                        side: BorderSide(color: Colors.red[700]!),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
+                        padding: EdgeInsets.symmetric(vertical: 10),
                       ),
                     ),
                   ),
@@ -1178,13 +1021,11 @@ class _SearchScreenState extends State<SearchScreen> {
                   Expanded(
                     flex: 1,
                     child: IconButton(
-                      onPressed: () => _showDetailSheet(result),
-                      icon: Icon(Icons.info_outline, color: Colors.grey[600]),
+                      icon: Icon(Icons.info_outline),
+                      color: Colors.blue[700],
+                      onPressed: () => _showDetailSheet(donor),
                       style: IconButton.styleFrom(
-                        backgroundColor: Colors.grey[100],
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
+                        backgroundColor: Colors.blue[50],
                       ),
                     ),
                   ),
@@ -1224,7 +1065,6 @@ class _SearchScreenState extends State<SearchScreen> {
           TextButton(
             onPressed: () {
               Navigator.pop(context);
-              // In a real app, use url_launcher to make the call
               ScaffoldMessenger.of(
                 context,
               ).showSnackBar(SnackBar(content: Text('Calling $phone...')));
@@ -1236,12 +1076,12 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  void _sendMessage(SearchResult result) {
+  void _sendMessage(User donor) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Send Message'),
-        content: Text('Send a message to ${result.name}?'),
+        content: Text('Send a message to ${donor.name}?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -1251,41 +1091,12 @@ class _SearchScreenState extends State<SearchScreen> {
             onPressed: () {
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Message sent to ${result.name}')),
+                SnackBar(content: Text('Message sent to ${donor.name}')),
               );
             },
             child: Text('Send'),
           ),
         ],
-      ),
-    );
-  }
-
-  // Quick filter chip widget
-  Widget _buildQuickFilterChip(
-    String label,
-    bool isSelected,
-    VoidCallback onTap,
-  ) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected ? Colors.red[100] : Colors.white,
-          border: Border.all(
-            color: isSelected ? Colors.red[700]! : Colors.grey[300]!,
-          ),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: isSelected ? Colors.red[700] : Colors.grey[700],
-            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-            fontSize: 12,
-          ),
-        ),
       ),
     );
   }

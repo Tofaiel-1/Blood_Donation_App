@@ -102,11 +102,37 @@ class BloodDonationApp extends StatelessWidget {
                   vertical: 6,
                 ),
                 child: SafeArea(
-                  bottom: false,
+                  bottom: false,                                                                                               
                   child: Row(
                     children: [
                       Icon(Icons.info_outline, color: Colors.white, size: 18),
                       const SizedBox(width: 8),
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                      
                       Expanded(
                         child: Text(
                           'Firebase not configured — some features (auth, messaging, firestore) will be disabled. See README_FIREBASE.md',

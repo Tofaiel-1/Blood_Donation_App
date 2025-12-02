@@ -7,6 +7,10 @@ import '../../models/donation.dart';
 import '../../widgets/themed_widgets.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/theme_manager.dart';
+import 'my_qr_code_screen.dart';
+import 'invite_friends_screen.dart';
+import 'help_support_screen.dart';
+import 'about_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -480,10 +484,58 @@ class _ProfileScreenState extends State<ProfileScreen>
 
                   // Quick actions
                   _buildSectionCard(context, 'Quick Actions', [
-                    _buildSettingsTile(context, Icons.qr_code, 'My QR Code'),
-                    _buildSettingsTile(context, Icons.share, 'Invite Friends'),
-                    _buildSettingsTile(context, Icons.help, 'Help & Support'),
-                    _buildSettingsTile(context, Icons.info, 'About'),
+                    _buildSettingsTile(
+                      context,
+                      Icons.qr_code,
+                      'My QR Code',
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const MyQRCodeScreen(),
+                          ),
+                        );
+                      },
+                    ),
+                    _buildSettingsTile(
+                      context,
+                      Icons.share,
+                      'Invite Friends',
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const InviteFriendsScreen(),
+                          ),
+                        );
+                      },
+                    ),
+                    _buildSettingsTile(
+                      context,
+                      Icons.help,
+                      'Help & Support',
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const HelpSupportScreen(),
+                          ),
+                        );
+                      },
+                    ),
+                    _buildSettingsTile(
+                      context,
+                      Icons.info,
+                      'About',
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const AboutScreen(),
+                          ),
+                        );
+                      },
+                    ),
                   ]),
                   const SizedBox(height: 24),
 

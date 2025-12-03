@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart' as fb_auth;
 import '../../models/message.dart';
+import '../../services/chat_service.dart';
 
 class MessagesScreen extends StatefulWidget {
   const MessagesScreen({super.key});
@@ -9,6 +11,8 @@ class MessagesScreen extends StatefulWidget {
 }
 
 class _MessagesScreenState extends State<MessagesScreen> {
+  final _auth = fb_auth.FirebaseAuth.instance;
+  final _chat = ChatService();
   List<ChatRoom> chatRooms = [];
   List<Message> emergencyNotifications = [];
   int _selectedTabIndex = 0;
@@ -87,98 +91,111 @@ class _MessagesScreenState extends State<MessagesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        title: Text('Messages', style: TextStyle(color: Colors.white)),
-        backgroundColor: Colors.red[700],
-        foregroundColor: Colors.white,
-        iconTheme: IconThemeData(color: Colors.white),
-        bottom: TabBar(
-          controller: TabController(length: 2, vsync: Scaffold.of(context)),
-          onTap: (index) => setState(() => _selectedTabIndex = index),
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
-          indicatorColor: Colors.white,
-          tabs: [
-            Tab(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.chat, color: Colors.white),
-                  SizedBox(width: 8),
-                  Text('Chats', style: TextStyle(color: Colors.white)),
-                  if (_getTotalUnreadChats() > 0) ...[
-                    SizedBox(width: 10),
-                    Container(
-                      padding: EdgeInsets.all(2),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(5),
-                      ),
-                      child: Text(
-                        '${_getTotalUnreadChats()}',
-                        style: TextStyle(
-                          color: Colors.red[700],
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            Tab(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.notification_important, color: Colors.white),
-                  SizedBox(width: 8),
-                  Text('Alerts', style: TextStyle(color: Colors.white)),
-                  if (_getUnreadNotifications() > 0) ...[
+    final uid = _auth.currentUser?.uid;
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        appBar: AppBar(
+          title: Text('Messages', style: TextStyle(color: Colors.white)),
+          backgroundColor: Colors.red[700],
+          foregroundColor: Colors.white,
+          iconTheme: IconThemeData(color: Colors.white),
+          bottom: TabBar(
+            onTap: (index) => setState(() => _selectedTabIndex = index),
+            labelColor: Colors.white,
+            unselectedLabelColor: Colors.white70,
+            indicatorColor: Colors.white,
+            tabs: [
+              Tab(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.chat, color: Colors.white),
                     SizedBox(width: 8),
-                    Container(
-                      padding: EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text(
-                        '${_getUnreadNotifications()}',
-                        style: TextStyle(
-                          color: Colors.red[700],
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
+                    Text('Chats', style: TextStyle(color: Colors.white)),
+                    if (_getTotalUnreadChats() > 0) ...[
+                      SizedBox(width: 10),
+                      Container(
+                        padding: EdgeInsets.all(2),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(5),
+                        ),
+                        child: Text(
+                          '${_getTotalUnreadChats()}',
+                          style: TextStyle(
+                            color: Colors.red[700],
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
-                    ),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
+              Tab(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.notification_important, color: Colors.white),
+                    SizedBox(width: 8),
+                    Text('Alerts', style: TextStyle(color: Colors.white)),
+                    if (_getUnreadNotifications() > 0) ...[
+                      SizedBox(width: 8),
+                      Container(
+                        padding: EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          '${_getUnreadNotifications()}',
+                          style: TextStyle(
+                            color: Colors.red[700],
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        body: IndexedStack(
+          index: _selectedTabIndex,
+          children: [
+            uid == null ? _buildLoginPrompt() : _buildChatsTab(uid),
+            _buildAlertsTab(),
           ],
         ),
+        floatingActionButton: _selectedTabIndex == 0
+            ? FloatingActionButton(
+                heroTag: 'messages_new_chat_fab',
+                onPressed: () => _startNewChat(uid),
+                backgroundColor: Colors.red[700],
+                foregroundColor: Colors.white,
+                child: Icon(Icons.add),
+              )
+            : null,
       ),
-      body: IndexedStack(
-        index: _selectedTabIndex,
-        children: [_buildChatsTab(), _buildAlertsTab()],
-      ),
-      floatingActionButton: _selectedTabIndex == 0
-          ? FloatingActionButton(
-              heroTag: 'messages_new_chat_fab',
-              onPressed: _startNewChat,
-              backgroundColor: Colors.red[700],
-              foregroundColor: Colors.white,
-              child: Icon(Icons.add),
-            )
-          : null,
     );
   }
 
-  Widget _buildChatsTab() {
-    return chatRooms.isEmpty
-        ? Center(
+  Widget _buildChatsTab(String uid) {
+    return StreamBuilder<List<ChatRoom>>(
+      stream: _chat.watchChatRooms(uid),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Center(child: CircularProgressIndicator());
+        }
+        final rooms = snapshot.data ?? [];
+        if (rooms.isEmpty) {
+          return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -190,20 +207,39 @@ class _MessagesScreenState extends State<MessagesScreen> {
                 ),
                 SizedBox(height: 8),
                 Text(
-                  'Start a conversation with donors or blood banks',
+                  'Start a conversation with admin/support',
                   style: TextStyle(color: Colors.grey),
                   textAlign: TextAlign.center,
                 ),
               ],
             ),
-          )
-        : ListView.builder(
-            itemCount: chatRooms.length,
-            itemBuilder: (context, index) {
-              final chatRoom = chatRooms[index];
-              return _buildChatRoomTile(chatRoom);
-            },
           );
+        }
+        return ListView.builder(
+          itemCount: rooms.length,
+          itemBuilder: (context, index) {
+            final room = rooms[index];
+            return _buildChatRoomTile(room);
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildLoginPrompt() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.lock, size: 64, color: Colors.grey),
+          SizedBox(height: 16),
+          Text(
+            'Please login to view messages',
+            style: TextStyle(fontSize: 18, color: Colors.grey),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildAlertsTab() {
@@ -439,142 +475,30 @@ class _MessagesScreenState extends State<MessagesScreen> {
     });
   }
 
-  void _startNewChat() {
-    showModalBottomSheet(
-      context: context,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => Container(
-        padding: EdgeInsets.all(20),
-        height: 300,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Start New Chat',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            ),
-            SizedBox(height: 20),
-            ListTile(
-              leading: Icon(Icons.search, color: Colors.red[700]),
-              title: Text('Search Donors'),
-              subtitle: Text('Find and message blood donors'),
-              onTap: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Opening donor search...')),
-                );
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.local_hospital, color: Colors.red[700]),
-              title: Text('Contact Blood Bank'),
-              subtitle: Text('Message blood bank centers'),
-              onTap: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Opening blood bank contacts...')),
-                );
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.emergency, color: Colors.red[700]),
-              title: Text('Emergency Request'),
-              subtitle: Text('Send urgent blood request'),
-              onTap: () {
-                Navigator.pop(context);
-                _showEmergencyRequestDialog();
-              },
-            ),
-          ],
-        ),
-      ),
+  void _startNewChat(String? uid) async {
+    if (uid == null) return;
+    final adminUid = await _chat.pickAnyAdminUid();
+    if (adminUid == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('No admin available')));
+      }
+      return;
+    }
+    final roomId = await _chat.startOrGetChatRoom(uid, adminUid);
+    final room = ChatRoom(
+      id: roomId,
+      participants: [uid, adminUid],
+      lastMessage: '',
+      lastMessageTime: DateTime.now(),
+      unreadCount: 0,
+      otherParticipantName: 'Admin',
     );
+    _openChat(room);
   }
 
-  void _showEmergencyRequestDialog() {
-    final bloodTypes = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
-    String? selectedBloodType;
-    final locationController = TextEditingController();
-    final messageController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Emergency Blood Request'),
-        content: StatefulBuilder(
-          builder: (context, setDialogState) => SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                DropdownButtonFormField<String>(
-                  decoration: InputDecoration(
-                    labelText: 'Blood Type Needed',
-                    border: OutlineInputBorder(),
-                  ),
-                  value: selectedBloodType,
-                  items: bloodTypes
-                      .map(
-                        (type) =>
-                            DropdownMenuItem(value: type, child: Text(type)),
-                      )
-                      .toList(),
-                  onChanged: (value) {
-                    setDialogState(() => selectedBloodType = value);
-                  },
-                ),
-                SizedBox(height: 16),
-                TextField(
-                  controller: locationController,
-                  decoration: InputDecoration(
-                    labelText: 'Hospital/Location',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                SizedBox(height: 16),
-                TextField(
-                  controller: messageController,
-                  decoration: InputDecoration(
-                    labelText: 'Additional Details',
-                    border: OutlineInputBorder(),
-                  ),
-                  maxLines: 3,
-                ),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              if (selectedBloodType != null &&
-                  locationController.text.isNotEmpty) {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      'Emergency request sent for $selectedBloodType blood',
-                    ),
-                    backgroundColor: Colors.red[700],
-                  ),
-                );
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red[700],
-              foregroundColor: Colors.white,
-            ),
-            child: Text('Send Request'),
-          ),
-        ],
-      ),
-    );
-  }
+  // Removed legacy emergency request dialog (unused after chat integration)
 
   void _respondToEmergency(Message notification) {
     showDialog(
@@ -642,6 +566,8 @@ class ChatDetailScreen extends StatefulWidget {
 
 class _ChatDetailScreenState extends State<ChatDetailScreen> {
   final TextEditingController _messageController = TextEditingController();
+  final _chat = ChatService();
+  final _auth = fb_auth.FirebaseAuth.instance;
   List<Message> messages = [];
 
   @override
@@ -651,39 +577,11 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   }
 
   void _loadChatMessages() {
-    // Mock chat messages
-    messages = [
-      Message(
-        id: '1',
-        senderId: widget.chatRoom.participants[1],
-        senderName: widget.chatRoom.otherParticipantName,
-        receiverId: widget.chatRoom.participants[0],
-        content: 'Hello! I saw your blood donation post.',
-        timestamp: DateTime.now().subtract(Duration(hours: 3)),
-        isRead: true,
-        type: MessageType.personal,
-      ),
-      Message(
-        id: '2',
-        senderId: widget.chatRoom.participants[0],
-        senderName: 'You',
-        receiverId: widget.chatRoom.participants[1],
-        content: 'Hi! Yes, I\'m available to donate. When do you need it?',
-        timestamp: DateTime.now().subtract(Duration(hours: 2, minutes: 30)),
-        isRead: true,
-        type: MessageType.personal,
-      ),
-      Message(
-        id: '3',
-        senderId: widget.chatRoom.participants[1],
-        senderName: widget.chatRoom.otherParticipantName,
-        receiverId: widget.chatRoom.participants[0],
-        content: widget.chatRoom.lastMessage,
-        timestamp: widget.chatRoom.lastMessageTime,
-        isRead: false,
-        type: MessageType.personal,
-      ),
-    ];
+    // Mark existing unread as read for current user
+    final uid = _auth.currentUser?.uid;
+    if (uid != null) {
+      _chat.markMessagesRead(widget.chatRoom.id, uid);
+    }
   }
 
   @override
@@ -718,18 +616,21 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
         child: Column(
           children: [
             Expanded(
-              child: Container(
-                color: Colors.white,
-                child: ListView.builder(
-                  padding: EdgeInsets.all(16),
-                  itemCount: messages.length,
-                  itemBuilder: (context, index) {
-                    final message = messages[index];
-                    final isMe =
-                        message.senderId == widget.chatRoom.participants[0];
-                    return _buildMessageBubble(message, isMe);
-                  },
-                ),
+              child: StreamBuilder<List<Message>>(
+                stream: _chat.watchMessages(widget.chatRoom.id),
+                builder: (context, snapshot) {
+                  final msgs = snapshot.data ?? [];
+                  final myUid = _auth.currentUser?.uid;
+                  return ListView.builder(
+                    padding: EdgeInsets.all(16),
+                    itemCount: msgs.length,
+                    itemBuilder: (context, index) {
+                      final message = msgs[index];
+                      final isMe = message.senderId == myUid;
+                      return _buildMessageBubble(message, isMe);
+                    },
+                  );
+                },
               ),
             ),
             _buildMessageInput(),
@@ -824,23 +725,22 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   }
 
   void _sendMessage() {
-    if (_messageController.text.trim().isNotEmpty) {
-      setState(() {
-        messages.add(
-          Message(
-            id: '${messages.length + 1}',
-            senderId: widget.chatRoom.participants[0],
-            senderName: 'You',
-            receiverId: widget.chatRoom.participants[1],
-            content: _messageController.text.trim(),
-            timestamp: DateTime.now(),
-            isRead: true,
-            type: MessageType.personal,
-          ),
-        );
-      });
-      _messageController.clear();
-    }
+    final text = _messageController.text.trim();
+    if (text.isEmpty) return;
+    final myUid = _auth.currentUser?.uid;
+    if (myUid == null) return;
+    final otherUid = widget.chatRoom.participants.firstWhere(
+      (p) => p != myUid,
+      orElse: () => myUid,
+    );
+    _chat
+        .sendMessage(
+          chatRoomId: widget.chatRoom.id,
+          content: text,
+          receiverId: otherUid,
+          type: MessageType.personal,
+        )
+        .then((_) => _messageController.clear());
   }
 
   @override

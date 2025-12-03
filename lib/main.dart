@@ -128,10 +128,6 @@ class BloodDonationApp extends StatelessWidget {
 
 
 
-
-
-
-
                       
                       Expanded(
                         child: Text(

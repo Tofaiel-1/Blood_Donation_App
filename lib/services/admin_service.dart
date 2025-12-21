@@ -3,10 +3,12 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import '../models/admin.dart';
 import '../models/blood_request.dart';
+import 'activity_log_service.dart';
 
 class AdminService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final ActivityLogService _activityLog = ActivityLogService();
 
   // ==================== ADMIN MANAGEMENT ====================
 
@@ -71,6 +73,15 @@ class AdminService {
         targetUserId: userCredential.user!.uid,
         details: {'email': email, 'name': name},
       );
+
+      // Log activity
+      await _activityLog.logAdminAction(
+        action: 'Admin Created',
+        description: 'New admin "$name" ($email) was created successfully',
+        targetUserId: userCredential.user!.uid,
+        targetUserName: name,
+        details: {'organization': organization, 'permissions': permissions},
+      );
     } finally {
       await secondaryApp?.delete();
     }
@@ -124,6 +135,13 @@ class AdminService {
         action: 'CREATE_USER',
         targetUserId: userCredential.user!.uid,
         details: {'email': email, 'name': name, 'bloodType': bloodType},
+      );
+
+      // Log activity
+      await _activityLog.logUserAction(
+        action: 'Donor Registered',
+        description: 'New donor "$name" ($bloodType) was registered',
+        targetUserId: userCredential.user!.uid,
       );
     } finally {
       await secondaryApp?.delete();
@@ -249,6 +267,14 @@ class AdminService {
       },
     );
 
+    // Log activity
+    await _activityLog.logRequest(
+      action: 'Blood Request Created',
+      description:
+          '$bloodType needed at $hospitalName for $patientName ($unitsNeeded units)',
+      status: ActivityStatus.pending,
+    );
+
     return docRef.id;
   }
 
@@ -352,8 +378,43 @@ class AdminService {
   }
 
   /// Get system-wide statistics (Super Admin)
-  Future<Map<String, dynamic>> getSystemStats() async {
-    final requests = await _firestore.collection('bloodRequests').get();
+  Future<Map<String, dynamic>> getSystemStats({
+    DateTime? startDate,
+    DateTime? endDate,
+    int? daysFilter, // 7, 30, 90 days
+  }) async {
+    // If daysFilter is provided, calculate startDate
+    if (daysFilter != null) {
+      startDate = DateTime.now().subtract(Duration(days: daysFilter));
+    }
+
+    Query requestsQuery = _firestore.collection('bloodRequests');
+    Query donationsQuery = _firestore.collection('donations');
+
+    if (startDate != null) {
+      requestsQuery = requestsQuery.where(
+        'requestDate',
+        isGreaterThanOrEqualTo: Timestamp.fromDate(startDate),
+      );
+      donationsQuery = donationsQuery.where(
+        'donationDate',
+        isGreaterThanOrEqualTo: Timestamp.fromDate(startDate),
+      );
+    }
+
+    if (endDate != null) {
+      requestsQuery = requestsQuery.where(
+        'requestDate',
+        isLessThanOrEqualTo: Timestamp.fromDate(endDate),
+      );
+      donationsQuery = donationsQuery.where(
+        'donationDate',
+        isLessThanOrEqualTo: Timestamp.fromDate(endDate),
+      );
+    }
+
+    final requests = await requestsQuery.get();
+    final donations = await donationsQuery.get();
     final admins = await _firestore
         .collection('users')
         .where('role', isEqualTo: 'orgAdmin')
@@ -362,10 +423,12 @@ class AdminService {
 
     final totalRequests = requests.docs.length;
     final pendingRequests = requests.docs
-        .where((d) => (d.data())['status'] == 'pending')
+        .where((d) => (d.data() as Map<String, dynamic>)['status'] == 'pending')
         .length;
     final fulfilledRequests = requests.docs
-        .where((d) => (d.data())['status'] == 'fulfilled')
+        .where(
+          (d) => (d.data() as Map<String, dynamic>)['status'] == 'fulfilled',
+        )
         .length;
 
     return {
@@ -374,9 +437,14 @@ class AdminService {
       'fulfilledRequests': fulfilledRequests,
       'totalAdmins': admins.docs.length,
       'activeAdmins': admins.docs
-          .where((d) => (d.data())['isActive'] == true)
+          .where((d) => (d.data() as Map<String, dynamic>)['isActive'] == true)
           .length,
       'totalUsers': users.docs.length,
+      'totalDonations': donations.docs.length,
+      'totalUnits': donations.docs.fold<int>(
+        0,
+        (sum, doc) => sum + ((doc.data() as Map)['units'] as int? ?? 1),
+      ),
     };
   }
 
@@ -386,7 +454,8 @@ class AdminService {
     final distribution = <String, int>{};
 
     for (var doc in requests.docs) {
-      final bloodType = doc.data()['bloodType'] ?? 'Unknown';
+      final bloodType =
+          (doc.data() as Map<String, dynamic>)['bloodType'] ?? 'Unknown';
       distribution[bloodType] = (distribution[bloodType] ?? 0) + 1;
     }
 
@@ -438,5 +507,256 @@ class AdminService {
         .where('role', isEqualTo: 'user')
         .where('bloodType', isEqualTo: bloodType)
         .snapshots();
+  }
+
+  Future<int> getLogsCount({String collection = 'auditLogs'}) async {
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection(collection)
+          .count()
+          .get();
+      return snapshot.count ?? 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  // ==================== TIME-BASED ANALYTICS ====================
+
+  /// Get statistics for last N days (7, 30, 90)
+  Future<Map<String, dynamic>> getTimeBasedStats(int days) async {
+    final startDate = DateTime.now().subtract(Duration(days: days));
+    return getSystemStats(startDate: startDate);
+  }
+
+  /// Get donation statistics with time filter
+  Future<Map<String, dynamic>> getDonationStats({
+    DateTime? startDate,
+    DateTime? endDate,
+    int? daysFilter,
+  }) async {
+    if (daysFilter != null) {
+      startDate = DateTime.now().subtract(Duration(days: daysFilter));
+    }
+
+    Query query = _firestore.collection('donations');
+
+    if (startDate != null) {
+      query = query.where(
+        'donationDate',
+        isGreaterThanOrEqualTo: Timestamp.fromDate(startDate),
+      );
+    }
+
+    if (endDate != null) {
+      query = query.where(
+        'donationDate',
+        isLessThanOrEqualTo: Timestamp.fromDate(endDate),
+      );
+    }
+
+    final snapshot = await query.get();
+
+    Map<String, int> donationsByBloodType = {};
+    Map<String, int> donationsByLocation = {};
+    int totalUnits = 0;
+
+    for (var doc in snapshot.docs) {
+      final data = doc.data() as Map<String, dynamic>;
+      final bloodType = data['bloodType'] ?? 'Unknown';
+      final location = data['location'] ?? 'Unknown';
+      final units = data['units'] as int? ?? 1;
+
+      donationsByBloodType[bloodType] =
+          (donationsByBloodType[bloodType] ?? 0) + 1;
+      donationsByLocation[location] = (donationsByLocation[location] ?? 0) + 1;
+      totalUnits += units;
+    }
+
+    return {
+      'totalDonations': snapshot.docs.length,
+      'totalUnits': totalUnits,
+      'donationsByBloodType': donationsByBloodType,
+      'donationsByLocation': donationsByLocation,
+      'averageUnitsPerDonation': snapshot.docs.length > 0
+          ? (totalUnits / snapshot.docs.length).toStringAsFixed(2)
+          : '0',
+    };
+  }
+
+  /// Get request statistics with time filter
+  Future<Map<String, dynamic>> getRequestStats({
+    DateTime? startDate,
+    DateTime? endDate,
+    int? daysFilter,
+  }) async {
+    if (daysFilter != null) {
+      startDate = DateTime.now().subtract(Duration(days: daysFilter));
+    }
+
+    Query query = _firestore.collection('bloodRequests');
+
+    if (startDate != null) {
+      query = query.where(
+        'requestDate',
+        isGreaterThanOrEqualTo: Timestamp.fromDate(startDate),
+      );
+    }
+
+    if (endDate != null) {
+      query = query.where(
+        'requestDate',
+        isLessThanOrEqualTo: Timestamp.fromDate(endDate),
+      );
+    }
+
+    final snapshot = await query.get();
+
+    int pending = 0;
+    int approved = 0;
+    int fulfilled = 0;
+    int cancelled = 0;
+    Map<String, int> requestsByBloodType = {};
+    Map<String, int> requestsByUrgency = {};
+
+    for (var doc in snapshot.docs) {
+      final data = doc.data() as Map<String, dynamic>;
+      final status = data['status']?.toString() ?? 'pending';
+      final bloodType = data['bloodType'] ?? 'Unknown';
+      final urgency = data['urgency']?.toString() ?? 'normal';
+
+      switch (status.toLowerCase()) {
+        case 'pending':
+          pending++;
+          break;
+        case 'approved':
+          approved++;
+          break;
+        case 'fulfilled':
+          fulfilled++;
+          break;
+        case 'cancelled':
+          cancelled++;
+          break;
+      }
+
+      requestsByBloodType[bloodType] =
+          (requestsByBloodType[bloodType] ?? 0) + 1;
+      requestsByUrgency[urgency] = (requestsByUrgency[urgency] ?? 0) + 1;
+    }
+
+    final total = snapshot.docs.length;
+
+    return {
+      'totalRequests': total,
+      'pending': pending,
+      'approved': approved,
+      'fulfilled': fulfilled,
+      'cancelled': cancelled,
+      'fulfillmentRate': total > 0
+          ? (fulfilled / total * 100).toStringAsFixed(1)
+          : '0',
+      'requestsByBloodType': requestsByBloodType,
+      'requestsByUrgency': requestsByUrgency,
+    };
+  }
+
+  /// Get user growth statistics
+  Future<Map<String, dynamic>> getUserGrowthStats({
+    DateTime? startDate,
+    DateTime? endDate,
+    int? daysFilter,
+  }) async {
+    if (daysFilter != null) {
+      startDate = DateTime.now().subtract(Duration(days: daysFilter));
+    }
+
+    Query query = _firestore.collection('users');
+
+    if (startDate != null) {
+      query = query.where(
+        'createdAt',
+        isGreaterThanOrEqualTo: Timestamp.fromDate(startDate),
+      );
+    }
+
+    if (endDate != null) {
+      query = query.where(
+        'createdAt',
+        isLessThanOrEqualTo: Timestamp.fromDate(endDate),
+      );
+    }
+
+    final snapshot = await query.get();
+    final allUsers = await _firestore.collection('users').get();
+
+    int newDonors = 0;
+    int newAdmins = 0;
+    Map<String, int> usersByBloodType = {};
+
+    for (var doc in snapshot.docs) {
+      final data = doc.data() as Map<String, dynamic>;
+      final role = data['role']?.toString() ?? 'user';
+      final bloodType = data['bloodType'] ?? 'Unknown';
+
+      if (role == 'user') {
+        newDonors++;
+        usersByBloodType[bloodType] = (usersByBloodType[bloodType] ?? 0) + 1;
+      } else if (role == 'orgAdmin') {
+        newAdmins++;
+      }
+    }
+
+    return {
+      'newUsers': snapshot.docs.length,
+      'newDonors': newDonors,
+      'newAdmins': newAdmins,
+      'totalUsers': allUsers.docs.length,
+      'usersByBloodType': usersByBloodType,
+    };
+  }
+
+  /// Get comparative statistics (compare time periods)
+  Future<Map<String, dynamic>> getComparativeStats({
+    required int currentPeriodDays,
+    required int previousPeriodDays,
+  }) async {
+    final currentStart = DateTime.now().subtract(
+      Duration(days: currentPeriodDays),
+    );
+    final previousStart = DateTime.now().subtract(
+      Duration(days: previousPeriodDays),
+    );
+    final previousEnd = currentStart;
+
+    final currentStats = await getSystemStats(startDate: currentStart);
+    final previousStats = await getSystemStats(
+      startDate: previousStart,
+      endDate: previousEnd,
+    );
+
+    int calcChange(int current, int previous) {
+      if (previous == 0) return current > 0 ? 100 : 0;
+      return (((current - previous) / previous) * 100).round();
+    }
+
+    return {
+      'current': currentStats,
+      'previous': previousStats,
+      'changes': {
+        'requests': calcChange(
+          currentStats['totalRequests'] ?? 0,
+          previousStats['totalRequests'] ?? 0,
+        ),
+        'donations': calcChange(
+          currentStats['totalDonations'] ?? 0,
+          previousStats['totalDonations'] ?? 0,
+        ),
+        'users': calcChange(
+          currentStats['totalUsers'] ?? 0,
+          previousStats['totalUsers'] ?? 0,
+        ),
+      },
+    };
   }
 }

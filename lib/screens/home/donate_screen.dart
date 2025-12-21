@@ -1489,7 +1489,7 @@ class _DonateScreenState extends State<DonateScreen>
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
-              await LocationService.openAppSettings();
+              await LocationService.openLocationSettings();
             },
             style: TextButton.styleFrom(foregroundColor: AppColors.bloodRed),
             child: const Text('Open Settings'),

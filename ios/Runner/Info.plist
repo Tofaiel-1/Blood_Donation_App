@@ -52,5 +52,12 @@
 	<string>We need your location to show nearby blood donation centers and provide directions.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>We need your location to show nearby blood donation centers and provide directions.</string>
+	
+	<!-- URL schemes for phone and SMS -->
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>tel</string>
+		<string>sms</string>
+	</array>
 </dict>
 </plist>

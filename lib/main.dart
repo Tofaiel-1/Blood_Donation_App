@@ -7,9 +7,14 @@ import 'firebase_options.dart';
 import 'utils/theme_manager.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'services/demo_data_service.dart';
+import 'services/localization_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize localization service
+  await LocalizationService().initialize();
+
   // Load environment variables (non-fatal if file missing).
   try {
     await dotenv.load(fileName: ".env");
@@ -66,8 +71,11 @@ Future<void> main() async {
   }
 
   runApp(
-    ChangeNotifierProvider(
-      create: (_) => ThemeManager(),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => ThemeManager()),
+        ChangeNotifierProvider(create: (_) => LocalizationService()),
+      ],
       child: BloodDonationApp(firebaseConfigured: firebaseConfigured),
     ),
   );
@@ -87,6 +95,7 @@ class BloodDonationApp extends StatelessWidget {
       theme: themeManager.lightTheme,
       darkTheme: themeManager.darkTheme,
       themeMode: themeManager.themeMode,
+      // Use AuthWrapper as initial route to handle login persistence
       initialRoute: '/',
       routes: appRoutes,
       builder: (context, child) {
@@ -102,33 +111,12 @@ class BloodDonationApp extends StatelessWidget {
                   vertical: 6,
                 ),
                 child: SafeArea(
-                  bottom: false,                                                                                               
+                  bottom: false,
                   child: Row(
                     children: [
                       Icon(Icons.info_outline, color: Colors.white, size: 18),
                       const SizedBox(width: 8),
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-                      
                       Expanded(
                         child: Text(
                           'Firebase not configured — some features (auth, messaging, firestore) will be disabled. See README_FIREBASE.md',

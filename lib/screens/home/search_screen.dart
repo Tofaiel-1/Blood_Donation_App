@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart' as auth;
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../models/user.dart';
 
 class SearchScreen extends StatefulWidget {
@@ -67,6 +68,7 @@ class _SearchScreenState extends State<SearchScreen> {
       final usersSnapshot = await FirebaseFirestore.instance
           .collection('users')
           .where('role', isEqualTo: 'user')
+          .where('emailVerified', isEqualTo: true)
           .limit(1)
           .get();
 
@@ -262,6 +264,7 @@ class _SearchScreenState extends State<SearchScreen> {
       final querySnapshot = await FirebaseFirestore.instance
           .collection('users')
           .where('role', isEqualTo: 'user')
+          .where('emailVerified', isEqualTo: true)
           .get();
 
       setState(() {
@@ -298,7 +301,8 @@ class _SearchScreenState extends State<SearchScreen> {
 
       Query<Map<String, dynamic>> firestoreQuery = FirebaseFirestore.instance
           .collection('users')
-          .where('role', isEqualTo: 'user');
+          .where('role', isEqualTo: 'user')
+          .where('emailVerified', isEqualTo: true);
 
       if (selectedBloodType != null) {
         firestoreQuery = firestoreQuery.where(
@@ -338,8 +342,9 @@ class _SearchScreenState extends State<SearchScreen> {
 
       if (sortBy == 'lastDonation') {
         results.sort((a, b) {
-          if (a.lastDonationDate == null && b.lastDonationDate == null)
+          if (a.lastDonationDate == null && b.lastDonationDate == null) {
             return 0;
+          }
           if (a.lastDonationDate == null) return 1;
           if (b.lastDonationDate == null) return -1;
           return b.lastDonationDate!.compareTo(a.lastDonationDate!);
@@ -1051,54 +1056,118 @@ class _SearchScreenState extends State<SearchScreen> {
     }
   }
 
-  void _callDonor(String phone) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Call Donor'),
-        content: Text('Would you like to call $phone?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Cancel'),
+  void _callDonor(String phone) async {
+    if (phone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('ফোন নম্বর পাওয়া যায়নি'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    try {
+      // Format and clean phone number
+      final cleanNumber = phone.replaceAll(RegExp(r'[^0-9+]'), '');
+
+      // Create tel: URI
+      final Uri phoneUri = Uri(scheme: 'tel', path: cleanNumber);
+
+      // Launch phone app directly (works offline)
+      await launchUrl(phoneUri, mode: LaunchMode.externalApplication);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.phone_in_talk, color: Colors.white),
+                const SizedBox(width: 12),
+                Expanded(child: Text('📞 Calling $cleanNumber...')),
+              ],
+            ),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
           ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(SnackBar(content: Text('Calling $phone...')));
-            },
-            child: Text('Call'),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Call করতে সমস্যা হয়েছে: $phone'),
+            backgroundColor: Colors.red,
+            action: SnackBarAction(
+              label: 'আবার চেষ্টা',
+              textColor: Colors.white,
+              onPressed: () => _callDonor(phone),
+            ),
           ),
-        ],
-      ),
-    );
+        );
+      }
+    }
   }
 
-  void _sendMessage(User donor) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Send Message'),
-        content: Text('Send a message to ${donor.name}?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Cancel'),
+  void _sendMessage(User donor) async {
+    if (donor.phone == null || donor.phone!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('ফোন নম্বর পাওয়া যায়নি'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    try {
+      // Format and clean phone number
+      final cleanNumber = donor.phone!.replaceAll(RegExp(r'[^0-9+]'), '');
+
+      // Pre-filled message for blood donation
+      final message =
+          'Hello ${donor.name}, I urgently need ${donor.bloodType} blood donation. Can you please help? Thanks - Blood Donation App';
+
+      // Create SMS URI with pre-filled message
+      final Uri smsUri = Uri(
+        scheme: 'sms',
+        path: cleanNumber,
+        queryParameters: {'body': message},
+      );
+
+      // Launch SMS app directly (works offline)
+      await launchUrl(smsUri, mode: LaunchMode.externalApplication);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.sms, color: Colors.white),
+                const SizedBox(width: 12),
+                Text('💬 SMS খুলছে ${donor.name} এর জন্য...'),
+              ],
+            ),
+            backgroundColor: Colors.blue,
+            duration: const Duration(seconds: 2),
           ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Message sent to ${donor.name}')),
-              );
-            },
-            child: Text('Send'),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('SMS পাঠাতে সমস্যা হয়েছে'),
+            backgroundColor: Colors.red,
+            action: SnackBarAction(
+              label: 'আবার চেষ্টা',
+              textColor: Colors.white,
+              onPressed: () => _sendMessage(donor),
+            ),
           ),
-        ],
-      ),
-    );
+        );
+      }
+    }
   }
 
   @override

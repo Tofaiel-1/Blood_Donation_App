@@ -7,6 +7,7 @@ import '../../utils/validators.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/responsive.dart';
 import '../../models/user.dart';
+import '../../widgets/bangladesh_location_selector.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -27,6 +28,12 @@ class _SignupScreenState extends State<SignupScreen> {
   final _confirmPasswordController = TextEditingController();
   String? _selectedBloodType;
   String? _selectedGender;
+  String? _selectedDivision;
+  String? _selectedDistrict;
+  String? _selectedUpazila;
+  String? _selectedVillage;
+  double? _currentLatitude;
+  double? _currentLongitude;
   bool _isPasswordVisible = false;
   bool _isConfirmPasswordVisible = false;
   bool _isSubmitting = false;
@@ -338,13 +345,75 @@ class _SignupScreenState extends State<SignupScreen> {
                               height: Responsive.responsiveSpacing(context),
                             ),
 
+                            // Bangladesh Location Selector
+                            Text(
+                              'Location Details',
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurface,
+                                  ),
+                            ),
+                            const SizedBox(height: 8),
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.blue[50],
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.blue.shade200),
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Icon(
+                                    Icons.info_outline,
+                                    color: Colors.blue[700],
+                                    size: 20,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'Please select your location. This helps us connect you with nearby donors and recipients.',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.blue[900],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            BangladeshLocationSelector(
+                              onLocationChanged:
+                                  (division, district, upazila, village) {
+                                    setState(() {
+                                      _selectedDivision = division;
+                                      _selectedDistrict = district;
+                                      _selectedUpazila = upazila;
+                                      _selectedVillage = village;
+                                    });
+                                  },
+                              onCurrentLocationChanged: (latitude, longitude) {
+                                setState(() {
+                                  _currentLatitude = latitude;
+                                  _currentLongitude = longitude;
+                                });
+                              },
+                              showCurrentLocation: true,
+                            ),
+                            SizedBox(
+                              height: Responsive.responsiveSpacing(context),
+                            ),
+
                             _buildTextField(
                               controller: _addressController,
-                              label: 'Address',
-                              hint: 'Enter your address (e.g. Dhaka)',
-                              icon: Icons.location_on_outlined,
-                              validator: (v) =>
-                                  v == null || v.isEmpty ? 'Required' : null,
+                              label: 'Detailed Address (Optional)',
+                              hint: 'Street, house number, landmarks, etc.',
+                              icon: Icons.home_outlined,
+                              maxLines: 2,
                             ),
                             SizedBox(
                               height: Responsive.responsiveSpacing(context),
@@ -700,6 +769,7 @@ class _SignupScreenState extends State<SignupScreen> {
     bool obscureText = false,
     String? Function(String?)? validator,
     Widget? suffixIcon,
+    int? maxLines = 1,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -721,6 +791,7 @@ class _SignupScreenState extends State<SignupScreen> {
           controller: controller,
           obscureText: obscureText,
           keyboardType: keyboardType,
+          maxLines: maxLines,
           decoration: InputDecoration(
             hintText: hint,
             prefixIcon: Icon(
@@ -810,6 +881,12 @@ class _SignupScreenState extends State<SignupScreen> {
       age: age,
       gender: gender,
       address: address,
+      division: _selectedDivision,
+      district: _selectedDistrict,
+      upazila: _selectedUpazila,
+      village: _selectedVillage,
+      latitude: _currentLatitude,
+      longitude: _currentLongitude,
       weight: weight,
     );
 
@@ -856,6 +933,12 @@ class _SignupScreenState extends State<SignupScreen> {
         'weight': weight,
         'gender': gender,
         'address': address,
+        'division': _selectedDivision,
+        'district': _selectedDistrict,
+        'upazila': _selectedUpazila,
+        'village': _selectedVillage,
+        'latitude': _currentLatitude,
+        'longitude': _currentLongitude,
         'role': 'user',
         'isDonor': false,
         'emailVerified': false,

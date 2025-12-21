@@ -10,6 +10,11 @@ import '../../utils/app_colors.dart';
 import '../../utils/responsive.dart';
 import '../../services/donation_stats_service.dart';
 import '../chat/chatbot_screen.dart';
+import '../emergency/emergency_request_screen.dart';
+import 'health_tracker_screen.dart';
+import 'buddy_system_screen.dart';
+import 'emergency_network_screen.dart';
+import 'campaigns_screen.dart';
 
 /// Redesigned HomeScreen with modern UI and themed widgets
 class HomeScreen extends StatefulWidget {
@@ -632,10 +637,10 @@ class _HomeScreenState extends State<HomeScreen>
                       ),
                       _buildQuickAction(
                         context,
-                        Icons.event,
-                        'Book Appointment',
+                        Icons.bookmark_add,
+                        'অগ্রিম বুকিং',
                         AppColors.lifeOrange,
-                        () => widget.onNavigateToTab?.call(2),
+                        () => Navigator.pushNamed(context, '/advance-booking'),
                       ),
                       _buildQuickAction(
                         context,
@@ -650,6 +655,34 @@ class _HomeScreenState extends State<HomeScreen>
                         'Add Donation',
                         AppColors.urgentRed,
                         _showAddDonationDialog,
+                      ),
+                      _buildQuickAction(
+                        context,
+                        Icons.favorite,
+                        'Health Check',
+                        Colors.pink,
+                        _navigateToHealthTracker,
+                      ),
+                      _buildQuickAction(
+                        context,
+                        Icons.people,
+                        'Find Buddy',
+                        Colors.purple,
+                        _navigateToBuddySystem,
+                      ),
+                      _buildQuickAction(
+                        context,
+                        Icons.sos,
+                        'Emergency Network',
+                        Colors.red.shade900,
+                        _navigateToEmergencyNetwork,
+                      ),
+                      _buildQuickAction(
+                        context,
+                        Icons.campaign,
+                        'Campaigns',
+                        Colors.orange,
+                        _navigateToCampaigns,
                       ),
                     ],
                   ),
@@ -677,18 +710,38 @@ class _HomeScreenState extends State<HomeScreen>
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        heroTag: 'home_chatbot_fab',
-        onPressed: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const ChatbotScreen()),
-        ),
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        icon: const Icon(Icons.smart_toy, color: Colors.white),
-        label: const Text(
-          'AI Assistant',
-          style: TextStyle(color: Colors.white),
-        ),
+      floatingActionButton: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          // Emergency Request FAB
+          FloatingActionButton.extended(
+            heroTag: 'emergency_request_fab',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const EmergencyRequestScreen()),
+            ),
+            backgroundColor: Colors.red,
+            icon: const Icon(Icons.emergency, color: Colors.white),
+            label: const Text(
+              'Emergency',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          // AI Assistant FAB
+          FloatingActionButton(
+            heroTag: 'home_chatbot_fab',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const ChatbotScreen()),
+            ),
+            backgroundColor: Theme.of(context).colorScheme.primary,
+            child: const Icon(Icons.smart_toy, color: Colors.white),
+          ),
+        ],
       ),
     );
   }
@@ -1136,6 +1189,35 @@ class _HomeScreenState extends State<HomeScreen>
           child: Text(text, style: Theme.of(context).textTheme.bodyLarge),
         ),
       ],
+    );
+  }
+
+  // Navigation methods for new features
+  void _navigateToHealthTracker() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const HealthTrackerScreen()),
+    );
+  }
+
+  void _navigateToBuddySystem() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const BuddySystemScreen()),
+    );
+  }
+
+  void _navigateToEmergencyNetwork() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const EmergencyNetworkScreen()),
+    );
+  }
+
+  void _navigateToCampaigns() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const CampaignsScreen()),
     );
   }
 }

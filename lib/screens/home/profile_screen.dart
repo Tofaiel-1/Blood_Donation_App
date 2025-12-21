@@ -2,15 +2,27 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart' as fb_auth;
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../models/user.dart';
 import '../../models/donation.dart';
 import '../../widgets/themed_widgets.dart';
+import '../../widgets/bangladesh_location_selector.dart';
+import '../../widgets/language_selector.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/theme_manager.dart';
+import '../../services/image_upload_service.dart';
+import '../../services/donor_health_tracker_service.dart';
+import '../../services/blood_buddy_service.dart';
+import '../../services/donation_scheduler_service.dart';
+import '../../services/localization_service.dart';
 import 'my_qr_code_screen.dart';
 import 'invite_friends_screen.dart';
 import 'help_support_screen.dart';
 import 'about_screen.dart';
+import 'health_tracker_screen.dart';
+import 'buddy_system_screen.dart';
+import '../premium/premium_membership_screen.dart';
+import '../verification/verification_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -25,9 +37,30 @@ class _ProfileScreenState extends State<ProfileScreen>
   List<Donation> donationHistory = [];
   int daysUntilNextDonation = 0;
   bool isLoadingDonations = true;
+  bool isUploadingImage = false;
+  final ImageUploadService _imageUploadService = ImageUploadService();
+  final DonorHealthTrackerService _healthService = DonorHealthTrackerService();
+  final BloodBuddyService _buddyService = BloodBuddyService();
+  final DonationSchedulerService _schedulerService = DonationSchedulerService();
+
+  // New feature states
+  int? _healthScore;
+  bool _isHealthEligible = false;
+  String _healthTrend = 'stable';
+  bool _isBuddy = false;
+  int _buddySuccessCount = 0;
+  DateTime? _nextDonationDate;
+
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _addressController = TextEditingController();
   String _selectedBloodType = 'A+';
+  String? _selectedDivision;
+  String? _selectedDistrict;
+  String? _selectedUpazila;
+  String? _selectedVillage;
+  double? _currentLatitude;
+  double? _currentLongitude;
   DonorAvailability _availability = DonorAvailability.available;
 
   final List<String> _bloodTypes = [
@@ -47,6 +80,9 @@ class _ProfileScreenState extends State<ProfileScreen>
     WidgetsBinding.instance.addObserver(this);
     _loadUserData();
     _loadDonationHistory();
+    _loadHealthData();
+    _loadBuddyData();
+    _loadNextDonationDate();
   }
 
   @override
@@ -54,6 +90,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     WidgetsBinding.instance.removeObserver(this);
     _nameController.dispose();
     _phoneController.dispose();
+    _addressController.dispose();
     super.dispose();
   }
 
@@ -245,6 +282,336 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
+  /// 📸 Upload profile image
+  Future<void> _uploadProfileImage(ImageSource source) async {
+    try {
+      setState(() {
+        isUploadingImage = true;
+      });
+
+      // Pick image
+      final XFile? imageFile;
+      if (source == ImageSource.camera) {
+        imageFile = await _imageUploadService.pickImageFromCamera();
+      } else {
+        imageFile = await _imageUploadService.pickImageFromGallery();
+      }
+
+      if (imageFile == null) {
+        setState(() {
+          isUploadingImage = false;
+        });
+        return;
+      }
+
+      // Get current user
+      final auth = fb_auth.FirebaseAuth.instance;
+      final user = auth.currentUser;
+      if (user == null) return;
+
+      // Delete old image if exists
+      if (currentUser?.profileImageUrl != null &&
+          currentUser!.profileImageUrl!.isNotEmpty) {
+        await _imageUploadService.deleteProfileImage(
+          currentUser!.profileImageUrl!,
+        );
+      }
+
+      // Upload new image
+      final downloadUrl = await _imageUploadService.uploadProfileImage(
+        user.uid,
+        imageFile,
+      );
+
+      if (downloadUrl == null) {
+        throw Exception('Failed to upload image');
+      }
+
+      // Update Firestore
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).update(
+        {
+          'profileImageUrl': downloadUrl,
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+      );
+
+      // Reload user data
+      await _loadUserData();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Profile image updated successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error uploading profile image: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Failed to upload image: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          isUploadingImage = false;
+        });
+      }
+    }
+  }
+
+  /// Show image source selection dialog
+  void _showImageSourceDialog() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 12),
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 20),
+              ListTile(
+                leading: const Icon(
+                  Icons.camera_alt,
+                  color: AppColors.bloodRed,
+                ),
+                title: const Text('Take Photo'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _uploadProfileImage(ImageSource.camera);
+                },
+              ),
+              ListTile(
+                leading: const Icon(
+                  Icons.photo_library,
+                  color: AppColors.bloodRed,
+                ),
+                title: const Text('Choose from Gallery'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _uploadProfileImage(ImageSource.gallery);
+                },
+              ),
+              if (currentUser?.profileImageUrl != null &&
+                  currentUser!.profileImageUrl!.isNotEmpty)
+                ListTile(
+                  leading: const Icon(Icons.delete, color: Colors.red),
+                  title: const Text('Remove Photo'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _removeProfileImage();
+                  },
+                ),
+              const SizedBox(height: 12),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Calculate health score from record
+  int _calculateHealthScore(Map<String, dynamic> record) {
+    int score = 0;
+
+    // Hemoglobin (0-25 points)
+    final hb = record['hemoglobin'] as num?;
+    if (hb != null) {
+      if (hb >= 12.5)
+        score += 25;
+      else if (hb >= 11.0)
+        score += 15;
+      else
+        score += 5;
+    }
+
+    // Blood pressure (0-25 points)
+    final systolic = record['systolicBP'] as num?;
+    final diastolic = record['diastolicBP'] as num?;
+    if (systolic != null && diastolic != null) {
+      if (systolic >= 90 &&
+          systolic <= 140 &&
+          diastolic >= 60 &&
+          diastolic <= 90)
+        score += 25;
+      else
+        score += 10;
+    }
+
+    // Weight (0-15 points)
+    final weight = record['weight'] as num?;
+    if (weight != null && weight >= 50) score += 15;
+
+    // Temperature (0-10 points)
+    final temp = record['temperature'] as num?;
+    if (temp != null && temp >= 36.5 && temp <= 37.5) score += 10;
+
+    // Pulse (0-10 points)
+    final pulse = record['pulse'] as num?;
+    if (pulse != null && pulse >= 60 && pulse <= 100) score += 10;
+
+    // Sleep (0-10 points)
+    final sleep = record['sleepHours'] as num?;
+    if (sleep != null && sleep >= 6) score += 10;
+
+    // Hydration (0-5 points)
+    final hydration = record['hydration'] as num?;
+    if (hydration != null && hydration >= 2) score += 5;
+
+    return score;
+  }
+
+  /// Load health data
+  Future<void> _loadHealthData() async {
+    try {
+      final user = fb_auth.FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+
+      final latestRecord = await _healthService.getLatestHealthRecord(user.uid);
+      if (latestRecord != null) {
+        // Calculate score using helper method
+        final score = _calculateHealthScore(latestRecord);
+        setState(() {
+          _healthScore = score;
+          _isHealthEligible = score >= 70;
+          _healthTrend = latestRecord['trend'] ?? 'stable';
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading health data: $e');
+    }
+  }
+
+  /// Load buddy data
+  Future<void> _loadBuddyData() async {
+    try {
+      final user = fb_auth.FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+
+      final buddyDoc = await FirebaseFirestore.instance
+          .collection('buddies')
+          .doc(user.uid)
+          .get();
+
+      if (buddyDoc.exists) {
+        final data = buddyDoc.data() ?? {};
+        setState(() {
+          _isBuddy = true;
+          _buddySuccessCount = data['successfulRelationships'] ?? 0;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading buddy data: $e');
+    }
+  }
+
+  /// Load next donation date
+  Future<void> _loadNextDonationDate() async {
+    try {
+      final user = fb_auth.FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+
+      final donationHistory = await FirebaseFirestore.instance
+          .collection('donations')
+          .where('donorId', isEqualTo: user.uid)
+          .orderBy('donationDate', descending: true)
+          .limit(1)
+          .get();
+
+      if (donationHistory.docs.isNotEmpty) {
+        final lastDonation = donationHistory.docs.first.data();
+        final lastDate = (lastDonation['donationDate'] as Timestamp).toDate();
+        final nextDate = _schedulerService.calculateNextEligibleDate(lastDate);
+        setState(() {
+          _nextDonationDate = nextDate;
+          if (nextDate != null) {
+            daysUntilNextDonation = nextDate.difference(DateTime.now()).inDays;
+            if (daysUntilNextDonation < 0) daysUntilNextDonation = 0;
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading next donation date: $e');
+    }
+  }
+
+  /// Remove profile image
+  Future<void> _removeProfileImage() async {
+    try {
+      setState(() {
+        isUploadingImage = true;
+      });
+
+      final auth = fb_auth.FirebaseAuth.instance;
+      final user = auth.currentUser;
+      if (user == null) return;
+
+      // Delete from storage
+      if (currentUser?.profileImageUrl != null &&
+          currentUser!.profileImageUrl!.isNotEmpty) {
+        await _imageUploadService.deleteProfileImage(
+          currentUser!.profileImageUrl!,
+        );
+      }
+
+      // Update Firestore
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .update({
+            'profileImageUrl': FieldValue.delete(),
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+
+      // Reload user data
+      await _loadUserData();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Profile image removed'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error removing profile image: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Failed to remove image: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          isUploadingImage = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (currentUser == null) {
@@ -276,27 +643,83 @@ class _ProfileScreenState extends State<ProfileScreen>
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       SizedBox(height: isSmallScreen ? 16 : 20),
-                      // Avatar
-                      Container(
-                        width: isSmallScreen ? 70 : 90,
-                        height: isSmallScreen ? 70 : 90,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.white.withValues(alpha: 0.3),
-                          border: Border.all(color: Colors.white, width: 3),
-                        ),
-                        child: Center(
-                          child: Text(
-                            currentUser!.name.isNotEmpty
-                                ? currentUser!.name[0].toUpperCase()
-                                : 'U',
-                            style: TextStyle(
-                              fontSize: isSmallScreen ? 32 : 42,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
+                      // Avatar with edit button
+                      Stack(
+                        children: [
+                          Container(
+                            width: isSmallScreen ? 80 : 100,
+                            height: isSmallScreen ? 80 : 100,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.white.withValues(alpha: 0.3),
+                              border: Border.all(color: Colors.white, width: 3),
+                              image:
+                                  currentUser!.profileImageUrl != null &&
+                                      currentUser!.profileImageUrl!.isNotEmpty
+                                  ? DecorationImage(
+                                      image: NetworkImage(
+                                        currentUser!.profileImageUrl!,
+                                      ),
+                                      fit: BoxFit.cover,
+                                    )
+                                  : null,
+                            ),
+                            child:
+                                currentUser!.profileImageUrl == null ||
+                                    currentUser!.profileImageUrl!.isEmpty
+                                ? Center(
+                                    child: Text(
+                                      currentUser!.name.isNotEmpty
+                                          ? currentUser!.name[0].toUpperCase()
+                                          : 'U',
+                                      style: TextStyle(
+                                        fontSize: isSmallScreen ? 36 : 48,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  )
+                                : null,
+                          ),
+                          // Edit button
+                          Positioned(
+                            right: 0,
+                            bottom: 0,
+                            child: GestureDetector(
+                              onTap: isUploadingImage
+                                  ? null
+                                  : _showImageSourceDialog,
+                              child: Container(
+                                width: isSmallScreen ? 28 : 32,
+                                height: isSmallScreen ? 28 : 32,
+                                decoration: BoxDecoration(
+                                  color: AppColors.bloodRed,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Colors.white,
+                                    width: 2,
+                                  ),
+                                ),
+                                child: isUploadingImage
+                                    ? const Padding(
+                                        padding: EdgeInsets.all(6),
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          valueColor:
+                                              AlwaysStoppedAnimation<Color>(
+                                                Colors.white,
+                                              ),
+                                        ),
+                                      )
+                                    : Icon(
+                                        Icons.camera_alt,
+                                        color: Colors.white,
+                                        size: isSmallScreen ? 14 : 16,
+                                      ),
+                              ),
                             ),
                           ),
-                        ),
+                        ],
                       ),
                       SizedBox(height: isSmallScreen ? 8 : 12),
                       Padding(
@@ -329,10 +752,44 @@ class _ProfileScreenState extends State<ProfileScreen>
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      SizedBox(height: isSmallScreen ? 6 : 8),
-                      BloodTypeBadge(
-                        bloodType: currentUser!.bloodType,
-                        size: isSmallScreen ? 45 : 55,
+                      SizedBox(height: isSmallScreen ? 12 : 16),
+                      // Blood Type Badge - More Visible
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(30),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.2),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.bloodtype,
+                              color: AppColors.bloodRed,
+                              size: isSmallScreen ? 20 : 24,
+                            ),
+                            SizedBox(width: isSmallScreen ? 6 : 8),
+                            Text(
+                              currentUser!.bloodType,
+                              style: TextStyle(
+                                color: AppColors.bloodRed,
+                                fontSize: isSmallScreen ? 20 : 24,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 1,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
@@ -437,9 +894,29 @@ class _ProfileScreenState extends State<ProfileScreen>
                         ),
                   SizedBox(height: isSmallScreen ? 16 : 24),
 
+                  // Health Dashboard Card
+                  if (_healthScore != null)
+                    _buildHealthDashboardCard(context, isSmallScreen),
+                  if (_healthScore != null)
+                    SizedBox(height: isSmallScreen ? 12 : 16),
+
+                  // Buddy Status Card
+                  _buildBuddyStatusCard(context, isSmallScreen),
+                  SizedBox(height: isSmallScreen ? 12 : 16),
+
+                  // Next Donation Countdown
+                  if (_nextDonationDate != null)
+                    _buildNextDonationCard(context, isSmallScreen),
+                  if (_nextDonationDate != null)
+                    SizedBox(height: isSmallScreen ? 16 : 24),
+
                   // Achievements/Badges Section
                   if (!isLoadingDonations && currentUser != null)
                     _buildBadgesSection(context),
+                  const SizedBox(height: 24),
+
+                  // Premium & Verification Cards
+                  _buildMonetizationSection(context),
                   const SizedBox(height: 24),
 
                   // Settings section
@@ -476,8 +953,26 @@ class _ProfileScreenState extends State<ProfileScreen>
                     _buildSettingsTile(
                       context,
                       Icons.language,
-                      'Language',
-                      subtitle: 'English',
+                      'Language / ভাষা',
+                      subtitle: null, // Will use Consumer widget below
+                      trailing: Consumer<LocalizationService>(
+                        builder: (context, localeService, child) {
+                          return Text(
+                            localeService.isBangla ? 'বাংলা' : 'English',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey[600],
+                            ),
+                          );
+                        },
+                      ),
+                      onTap: () {
+                        showDialog(
+                          context: context,
+                          builder: (context) =>
+                              const LanguageSelector(showInDialog: true),
+                        );
+                      },
                     ),
                   ]),
                   const SizedBox(height: 16),
@@ -1078,12 +1573,19 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   void _showEditProfile() {
-    // Reset controllers and blood type to current values
+    // Reset controllers and values to current values
     _nameController.text = currentUser!.name;
     _phoneController.text = currentUser!.phone ?? '';
+    _addressController.text = currentUser!.address ?? '';
     _selectedBloodType = currentUser!.bloodType.isNotEmpty
         ? currentUser!.bloodType
         : 'A+';
+    _selectedDivision = currentUser!.division;
+    _selectedDistrict = currentUser!.district;
+    _selectedUpazila = currentUser!.upazila;
+    _selectedVillage = currentUser!.village;
+    _currentLatitude = currentUser!.latitude;
+    _currentLongitude = currentUser!.longitude;
 
     showModalBottomSheet(
       context: context,
@@ -1162,6 +1664,55 @@ class _ProfileScreenState extends State<ProfileScreen>
                     ),
                     controller: _phoneController,
                     keyboardType: TextInputType.phone,
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Location Section
+                  const Divider(height: 32),
+                  Text(
+                    'Location Information',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  BangladeshLocationSelector(
+                    initialDivision: _selectedDivision,
+                    initialDistrict: _selectedDistrict,
+                    initialUpazila: _selectedUpazila,
+                    initialVillage: _selectedVillage,
+                    onLocationChanged: (division, district, upazila, village) {
+                      setModalState(() {
+                        _selectedDivision = division;
+                        _selectedDistrict = district;
+                        _selectedUpazila = upazila;
+                        _selectedVillage = village;
+                      });
+                    },
+                    onCurrentLocationChanged: (latitude, longitude) {
+                      setModalState(() {
+                        _currentLatitude = latitude;
+                        _currentLongitude = longitude;
+                      });
+                    },
+                    showCurrentLocation: true,
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Detailed Address
+                  TextField(
+                    decoration: InputDecoration(
+                      labelText: 'Detailed Address (Optional)',
+                      hintText: 'Street, house number, landmarks',
+                      prefixIcon: const Icon(Icons.home),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      filled: true,
+                      fillColor: Colors.grey[50],
+                    ),
+                    controller: _addressController,
+                    maxLines: 2,
                   ),
                   const SizedBox(height: 20),
 
@@ -1275,18 +1826,30 @@ class _ProfileScreenState extends State<ProfileScreen>
           .update({
             'name': _nameController.text.trim(),
             'phone': _phoneController.text.trim(),
+            'address': _addressController.text.trim(),
             'bloodType': _selectedBloodType,
+            'division': _selectedDivision,
+            'district': _selectedDistrict,
+            'upazila': _selectedUpazila,
+            'village': _selectedVillage,
+            'latitude': _currentLatitude,
+            'longitude': _currentLongitude,
             'updatedAt': FieldValue.serverTimestamp(),
           });
 
       // Update local state
       setState(() {
-        currentUser = User(
-          email: currentUser!.email,
+        currentUser = currentUser!.copyWith(
           name: _nameController.text.trim(),
-          bloodType: _selectedBloodType,
           phone: _phoneController.text.trim(),
-          role: currentUser!.role,
+          address: _addressController.text.trim(),
+          bloodType: _selectedBloodType,
+          division: _selectedDivision,
+          district: _selectedDistrict,
+          upazila: _selectedUpazila,
+          village: _selectedVillage,
+          latitude: _currentLatitude,
+          longitude: _currentLongitude,
         );
       });
 
@@ -1426,5 +1989,482 @@ class _ProfileScreenState extends State<ProfileScreen>
         );
       }
     }
+  }
+
+  // Monetization Section - Premium & Verification
+  Widget _buildMonetizationSection(BuildContext context) {
+    final isPremium = currentUser?.isPremium ?? false;
+    final isVerified = currentUser?.isVerified ?? false;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Premium Card
+        if (!isPremium)
+          Card(
+            elevation: 4,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Colors.amber.shade700, Colors.amber.shade400],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.workspace_premium,
+                    color: Colors.white,
+                    size: 28,
+                  ),
+                ),
+                title: const Text(
+                  'Upgrade to Premium',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+                subtitle: const Text(
+                  'Priority listing + Verified badge + Ad-free',
+                  style: TextStyle(color: Colors.white, fontSize: 12),
+                ),
+                trailing: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '৳100/mo',
+                    style: TextStyle(
+                      color: Colors.amber.shade700,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const PremiumMembershipScreen(),
+                    ),
+                  );
+                },
+              ),
+            ),
+          )
+        else
+          Card(
+            elevation: 2,
+            child: ListTile(
+              leading: const Icon(
+                Icons.workspace_premium,
+                color: Colors.amber,
+                size: 28,
+              ),
+              title: const Text(
+                'Premium Member',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              subtitle: Text(
+                'Expires: ${currentUser?.premiumExpiryDate?.toString().split(' ')[0] ?? 'N/A'}',
+                style: const TextStyle(fontSize: 12),
+              ),
+              trailing: const Icon(Icons.check_circle, color: Colors.green),
+            ),
+          ),
+        const SizedBox(height: 12),
+
+        // Verification Card
+        if (!isVerified)
+          Card(
+            elevation: 4,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Colors.blue.shade700, Colors.blue.shade400],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.verified_user,
+                    color: Colors.white,
+                    size: 28,
+                  ),
+                ),
+                title: const Text(
+                  'Get Verified Badge',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+                subtitle: const Text(
+                  'Increase trust + More blood requests',
+                  style: TextStyle(color: Colors.white, fontSize: 12),
+                ),
+                trailing: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '৳50',
+                    style: TextStyle(
+                      color: Colors.blue.shade700,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const VerificationScreen(),
+                    ),
+                  );
+                },
+              ),
+            ),
+          )
+        else
+          Card(
+            elevation: 2,
+            child: ListTile(
+              leading: const Icon(
+                Icons.verified_user,
+                color: Colors.blue,
+                size: 28,
+              ),
+              title: const Text(
+                'Verified Account',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              subtitle: Text(
+                'Verified on: ${currentUser?.verifiedAt?.toString().split(' ')[0] ?? 'N/A'}',
+                style: const TextStyle(fontSize: 12),
+              ),
+              trailing: const Icon(Icons.check_circle, color: Colors.green),
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// Build Health Dashboard Card
+  Widget _buildHealthDashboardCard(BuildContext context, bool isSmallScreen) {
+    final scoreColor = _isHealthEligible ? Colors.green : Colors.orange;
+    final trendIcon = _healthTrend == 'improving'
+        ? Icons.trending_up
+        : _healthTrend == 'declining'
+        ? Icons.trending_down
+        : Icons.trending_flat;
+    final trendColor = _healthTrend == 'improving'
+        ? Colors.green
+        : _healthTrend == 'declining'
+        ? Colors.red
+        : Colors.grey;
+
+    return Card(
+      elevation: 3,
+      child: InkWell(
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const HealthTrackerScreen()),
+        ),
+        child: Padding(
+          padding: EdgeInsets.all(isSmallScreen ? 12.0 : 16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    Icons.favorite,
+                    color: Colors.pink,
+                    size: isSmallScreen ? 24 : 28,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Health Dashboard',
+                      style: TextStyle(
+                        fontSize: isSmallScreen ? 16 : 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  Icon(
+                    Icons.arrow_forward_ios,
+                    size: 16,
+                    color: Colors.grey[600],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Health Score',
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Text(
+                              '${_healthScore}/100',
+                              style: TextStyle(
+                                fontSize: isSmallScreen ? 24 : 28,
+                                fontWeight: FontWeight.bold,
+                                color: scoreColor,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Icon(trendIcon, color: trendColor, size: 20),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _isHealthEligible
+                          ? Colors.green.shade50
+                          : Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: _isHealthEligible ? Colors.green : Colors.orange,
+                      ),
+                    ),
+                    child: Text(
+                      _isHealthEligible ? '✅ Eligible' : '⚠️ Check Required',
+                      style: TextStyle(
+                        color: _isHealthEligible ? Colors.green : Colors.orange,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Build Buddy Status Card
+  Widget _buildBuddyStatusCard(BuildContext context, bool isSmallScreen) {
+    return Card(
+      elevation: 3,
+      child: InkWell(
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const BuddySystemScreen()),
+        ),
+        child: Padding(
+          padding: EdgeInsets.all(isSmallScreen ? 12.0 : 16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    Icons.people,
+                    color: Colors.purple,
+                    size: isSmallScreen ? 24 : 28,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Blood Buddy System',
+                      style: TextStyle(
+                        fontSize: isSmallScreen ? 16 : 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  Icon(
+                    Icons.arrow_forward_ios,
+                    size: 16,
+                    color: Colors.grey[600],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              if (_isBuddy)
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '🎖️ You are a Buddy!',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.purple,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Successfully helped $_buddySuccessCount donors',
+                            style: TextStyle(
+                              color: Colors.grey[600],
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.purple.shade50,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Text(
+                        '$_buddySuccessCount',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.purple,
+                        ),
+                      ),
+                    ),
+                  ],
+                )
+              else
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      '💪 Become a Blood Buddy!',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Help first-time donors and earn ৳50 per successful mentorship',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Build Next Donation Countdown Card
+  Widget _buildNextDonationCard(BuildContext context, bool isSmallScreen) {
+    final daysLeft = _nextDonationDate!.difference(DateTime.now()).inDays;
+    final isEligible = daysLeft <= 0;
+    final cardColor = isEligible ? Colors.green : Colors.orange;
+
+    return Card(
+      elevation: 3,
+      color: isEligible ? Colors.green.shade50 : Colors.orange.shade50,
+      child: Padding(
+        padding: EdgeInsets.all(isSmallScreen ? 12.0 : 16.0),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: cardColor.withValues(alpha: 0.2),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                isEligible ? Icons.check_circle : Icons.schedule,
+                color: cardColor,
+                size: isSmallScreen ? 28 : 32,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    isEligible ? '🎉 Ready to Donate!' : 'Next Donation',
+                    style: TextStyle(
+                      fontSize: isSmallScreen ? 14 : 16,
+                      fontWeight: FontWeight.bold,
+                      color: cardColor,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    isEligible
+                        ? 'You can donate blood now!'
+                        : '$daysLeft days remaining',
+                    style: TextStyle(
+                      color: Colors.grey[700],
+                      fontSize: isSmallScreen ? 12 : 14,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

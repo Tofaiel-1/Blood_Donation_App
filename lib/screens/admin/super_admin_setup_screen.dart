@@ -30,8 +30,20 @@ class _SuperAdminSetupScreenState extends State<SuperAdminSetupScreen> {
       const name = 'Super Admin';
 
       // Step 1: Create Firebase Auth account
-      final userCredential = await FirebaseAuth.instance
-          .createUserWithEmailAndPassword(email: email, password: password);
+      // If email already exists, skip creation and mark success
+      UserCredential? userCredential;
+      try {
+        userCredential = await FirebaseAuth.instance
+            .createUserWithEmailAndPassword(email: email, password: password);
+      } on FirebaseAuthException catch (e) {
+        if (e.code == 'email-already-in-use') {
+          // Try to sign in to get UID
+          userCredential = await FirebaseAuth.instance
+              .signInWithEmailAndPassword(email: email, password: password);
+        } else {
+          rethrow;
+        }
+      }
 
       final uid = userCredential.user!.uid;
 
@@ -48,7 +60,7 @@ class _SuperAdminSetupScreenState extends State<SuperAdminSetupScreen> {
         'phoneVerified': true, // Super admin doesn't need phone verification
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
-      });
+      }, SetOptions(merge: true));
 
       // Step 3: Sign out (so user can login normally)
       await FirebaseAuth.instance.signOut();
@@ -69,18 +81,7 @@ You can now login with these credentials.
       setState(() {
         _isCreating = false;
         _isSuccess = false;
-        if (e.code == 'email-already-in-use') {
-          _message = '''
-⚠️ Super admin already exists!
-
-Email: mdtofaielhussaintota@gmail.com
-Password: super123
-
-Try logging in with these credentials.
-          ''';
-        } else {
-          _message = '❌ Error: ${e.message}';
-        }
+        _message = '❌ Error: ${e.message}';
       });
     } catch (e) {
       setState(() {

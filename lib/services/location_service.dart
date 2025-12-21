@@ -68,7 +68,12 @@ class LocationService {
   }
 
   /// Open app settings for permission management
-  static Future<bool> openAppSettings() async {
-    return await openAppSettings();
+  static Future<bool> openLocationSettings() async {
+    return await Geolocator.openAppSettings();
+  }
+
+  /// Open location settings
+  static Future<bool> openLocationServiceSettings() async {
+    return await Geolocator.openLocationSettings();
   }
 }

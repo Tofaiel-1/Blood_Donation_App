@@ -28,6 +28,15 @@ class User {
   final int? age;
   final String? gender;
   final String? address;
+
+  // Bangladesh location fields
+  final String? division;
+  final String? district;
+  final String? upazila;
+  final String? village; // Village/Union
+  final double? latitude; // Current location
+  final double? longitude; // Current location
+
   final DateTime? lastDonationDate;
 
   // Enhanced fields for donation tracking
@@ -44,6 +53,16 @@ class User {
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
+  // Premium & Monetization fields
+  final bool isPremium;
+  final String? premiumPlan; // 'monthly', 'quarterly', 'yearly'
+  final DateTime? premiumExpiryDate;
+  final bool isVerified; // For verification service
+  final DateTime? verifiedAt;
+  final String? verificationTransactionId;
+  final bool isHospitalPartner; // For hospitals/blood banks
+  final String? partnershipId; // Link to HospitalPartnership
+
   User({
     this.id,
     required this.email,
@@ -54,6 +73,12 @@ class User {
     this.age,
     this.gender,
     this.address,
+    this.division,
+    this.district,
+    this.upazila,
+    this.village,
+    this.latitude,
+    this.longitude,
     this.lastDonationDate,
     this.totalDonations = 0,
     this.livesSaved = 0,
@@ -67,6 +92,14 @@ class User {
     this.profileImageUrl,
     this.createdAt,
     this.updatedAt,
+    this.isPremium = false,
+    this.premiumPlan,
+    this.premiumExpiryDate,
+    this.isVerified = false,
+    this.verifiedAt,
+    this.verificationTransactionId,
+    this.isHospitalPartner = false,
+    this.partnershipId,
   });
 
   /// Check if user can donate now (120 days rule)
@@ -191,6 +224,12 @@ class User {
       age: map['age'],
       gender: map['gender'],
       address: map['address'],
+      division: map['division'],
+      district: map['district'],
+      upazila: map['upazila'],
+      village: map['village'],
+      latitude: map['latitude']?.toDouble(),
+      longitude: map['longitude']?.toDouble(),
       lastDonationDate: (map['lastDonationDate'] as Timestamp?)?.toDate(),
       totalDonations: map['totalDonations'] ?? 0,
       livesSaved: map['livesSaved'] ?? map['totalDonations'] ?? 0,
@@ -204,6 +243,14 @@ class User {
       profileImageUrl: map['profileImageUrl'],
       createdAt: (map['createdAt'] as Timestamp?)?.toDate(),
       updatedAt: (map['updatedAt'] as Timestamp?)?.toDate(),
+      isPremium: map['isPremium'] ?? false,
+      premiumPlan: map['premiumPlan'],
+      premiumExpiryDate: (map['premiumExpiryDate'] as Timestamp?)?.toDate(),
+      isVerified: map['isVerified'] ?? false,
+      verifiedAt: (map['verifiedAt'] as Timestamp?)?.toDate(),
+      verificationTransactionId: map['verificationTransactionId'],
+      isHospitalPartner: map['isHospitalPartner'] ?? false,
+      partnershipId: map['partnershipId'],
     );
   }
 
@@ -218,6 +265,12 @@ class User {
       'age': age,
       'gender': gender,
       'address': address,
+      'division': division,
+      'district': district,
+      'upazila': upazila,
+      'village': village,
+      'latitude': latitude,
+      'longitude': longitude,
       'lastDonationDate': lastDonationDate != null
           ? Timestamp.fromDate(lastDonationDate!)
           : null,
@@ -239,6 +292,16 @@ class User {
           ? Timestamp.fromDate(createdAt!)
           : FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
+      'isPremium': isPremium,
+      'premiumPlan': premiumPlan,
+      'premiumExpiryDate': premiumExpiryDate != null
+          ? Timestamp.fromDate(premiumExpiryDate!)
+          : null,
+      'isVerified': isVerified,
+      'verifiedAt': verifiedAt != null ? Timestamp.fromDate(verifiedAt!) : null,
+      'verificationTransactionId': verificationTransactionId,
+      'isHospitalPartner': isHospitalPartner,
+      'partnershipId': partnershipId,
     };
   }
 
@@ -253,6 +316,12 @@ class User {
     int? age,
     String? gender,
     String? address,
+    String? division,
+    String? district,
+    String? upazila,
+    String? village,
+    double? latitude,
+    double? longitude,
     DateTime? lastDonationDate,
     int? totalDonations,
     int? livesSaved,
@@ -266,6 +335,14 @@ class User {
     String? profileImageUrl,
     DateTime? createdAt,
     DateTime? updatedAt,
+    bool? isPremium,
+    String? premiumPlan,
+    DateTime? premiumExpiryDate,
+    bool? isVerified,
+    DateTime? verifiedAt,
+    String? verificationTransactionId,
+    bool? isHospitalPartner,
+    String? partnershipId,
   }) {
     return User(
       id: id ?? this.id,
@@ -277,6 +354,12 @@ class User {
       age: age ?? this.age,
       gender: gender ?? this.gender,
       address: address ?? this.address,
+      division: division ?? this.division,
+      district: district ?? this.district,
+      upazila: upazila ?? this.upazila,
+      village: village ?? this.village,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
       lastDonationDate: lastDonationDate ?? this.lastDonationDate,
       totalDonations: totalDonations ?? this.totalDonations,
       livesSaved: livesSaved ?? this.livesSaved,
@@ -290,6 +373,15 @@ class User {
       profileImageUrl: profileImageUrl ?? this.profileImageUrl,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      isPremium: isPremium ?? this.isPremium,
+      premiumPlan: premiumPlan ?? this.premiumPlan,
+      premiumExpiryDate: premiumExpiryDate ?? this.premiumExpiryDate,
+      isVerified: isVerified ?? this.isVerified,
+      verifiedAt: verifiedAt ?? this.verifiedAt,
+      verificationTransactionId:
+          verificationTransactionId ?? this.verificationTransactionId,
+      isHospitalPartner: isHospitalPartner ?? this.isHospitalPartner,
+      partnershipId: partnershipId ?? this.partnershipId,
     );
   }
 }

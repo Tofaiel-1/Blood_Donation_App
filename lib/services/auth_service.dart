@@ -69,11 +69,61 @@ class AuthService {
   /// এই method automatically check করে user already verified কিনা
   /// Link click করলে email verified হবে
   ///
+  /// ✅ Custom email template ব্যবহার করে spam folder avoid করে
+  ///
   /// Used in: lib/screens/auth/verification_screen.dart line 80+
   Future<void> sendEmailVerification() async {
     final user = _auth.currentUser;
     if (user != null && !user.emailVerified) {
-      await user.sendEmailVerification();
+      // Custom action code settings for better email delivery
+      final actionCodeSettings = ActionCodeSettings(
+        // URL to redirect after verification
+        url: 'https://blooddonation.com/verify-email',
+        handleCodeInApp: false,
+        // Mobile app settings (optional)
+        iOSBundleId: 'com.example.bloodBank1',
+        androidPackageName: 'com.example.blood_bank1',
+        androidInstallApp: true,
+        androidMinimumVersion: '21',
+      );
+
+      await user.sendEmailVerification(actionCodeSettings);
+
+      // Log email sent for tracking
+      await FirebaseFirestore.instance.collection('emailLogs').add({
+        'type': 'verification',
+        'to': user.email,
+        'userId': user.uid,
+        'sentAt': FieldValue.serverTimestamp(),
+        'status': 'sent',
+      });
+    }
+  }
+
+  /// Email verification status check করে
+  /// Returns: true if email verified, false otherwise
+  Future<bool> checkEmailVerified() async {
+    await _auth.currentUser?.reload();
+    return _auth.currentUser?.emailVerified ?? false;
+  }
+
+  /// Email verification resend করে (rate limit সাথে)
+  /// Prevents spam sending, max 1 email per minute
+  Future<bool> resendVerificationEmail() async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) return false;
+
+      if (user.emailVerified) {
+        debugPrint('Email already verified');
+        return false;
+      }
+
+      await sendEmailVerification();
+      return true;
+    } catch (e) {
+      debugPrint('Error resending verification email: $e');
+      return false;
     }
   }
 

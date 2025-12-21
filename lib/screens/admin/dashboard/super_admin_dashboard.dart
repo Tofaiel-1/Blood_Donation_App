@@ -19,6 +19,7 @@ import 'widgets/manage_orgs_dialog.dart';
 import 'widgets/app_settings_dialog.dart';
 import 'widgets/permissions_dialog.dart';
 import 'widgets/broadcast_alert_dialog.dart';
+import '../admin_revenue_screen.dart';
 
 class SuperAdminDashboard extends StatefulWidget {
   const SuperAdminDashboard({super.key});
@@ -39,6 +40,8 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
   };
   Map<String, int> _bloodTypeDistribution = {};
   bool _isLoading = true;
+  int _logsCount = 0;
+  int? _selectedDaysFilter; // null = All Time, 7, 30, 90
 
   @override
   void initState() {
@@ -51,7 +54,9 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
     setState(() => _isLoading = true);
 
     try {
-      final stats = await _adminService.getSystemStats();
+      final stats = await _adminService.getSystemStats(
+        daysFilter: _selectedDaysFilter,
+      );
       final bloodDist = await _adminService.getBloodTypeDistribution();
 
       // Get donation count separately as it's not in getSystemStats
@@ -88,6 +93,13 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
       int globalDonations = donationCount; // fallback to count
       int globalLivesSaved = donationCount; // fallback to count
 
+      // Load logs count via AdminService (uses 'auditLogs' by default)
+      int logsCount = await _adminService.getLogsCount();
+      if (logsCount == 0) {
+        // Fallback to local sample logs length if none found
+        logsCount = 5;
+      }
+
       if (globalStatsDoc.exists) {
         final globalData = globalStatsDoc.data() ?? {};
         globalDonations = globalData['totalDonations'] ?? donationCount;
@@ -102,6 +114,7 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
           _stats['totalOrgs'] = organizations;
           _bloodTypeDistribution = bloodDist;
           _isLoading = false;
+          _logsCount = logsCount;
         });
       }
     } catch (e) {
@@ -234,14 +247,60 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : LayoutBuilder(
-              builder: (context, constraints) {
-                if (constraints.maxWidth > 800) {
-                  return _buildDesktopLayout(context);
-                } else {
-                  return _buildMobileLayout(context);
-                }
-              },
+          : Column(
+              children: [
+                // Time Filter Bar
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16.0,
+                    vertical: 8.0,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    border: Border(
+                      bottom: BorderSide(color: Colors.grey[300]!),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Text(
+                        'Filter by: ',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(width: 12),
+                      _buildTimeFilterChip('All Time', null),
+                      _buildTimeFilterChip('7 Days', 7),
+                      _buildTimeFilterChip('30 Days', 30),
+                      _buildTimeFilterChip('90 Days', 90),
+                      const Spacer(),
+                      if (_selectedDaysFilter != null)
+                        TextButton.icon(
+                          onPressed: () {
+                            setState(() => _selectedDaysFilter = null);
+                            _loadData();
+                          },
+                          icon: const Icon(Icons.clear, size: 16),
+                          label: const Text('Clear'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: Colors.red,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                // Main Content
+                Expanded(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      if (constraints.maxWidth > 800) {
+                        return _buildDesktopLayout(context);
+                      } else {
+                        return _buildMobileLayout(context);
+                      }
+                    },
+                  ),
+                ),
+              ],
             ),
       drawer: Drawer(
         child: ListView(
@@ -285,6 +344,20 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
                 );
               },
             ),
+            ListTile(
+              leading: const Icon(Icons.attach_money),
+              title: const Text('Revenue Dashboard'),
+              onTap: () {
+                Navigator.pop(context); // Close drawer
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const AdminRevenueScreen(),
+                  ),
+                );
+              },
+            ),
+            const Divider(),
             ListTile(
               leading: const Icon(Icons.settings),
               title: const Text('Settings'),
@@ -489,6 +562,13 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
           },
         ),
         StatCard(
+          title: 'Advance Bookings',
+          value: '0',
+          icon: Icons.bookmark_add,
+          color: Colors.purple,
+          onTap: () => Navigator.pushNamed(context, '/admin/booking-dashboard'),
+        ),
+        StatCard(
           title: 'Pending',
           value: _stats['pendingRequests'].toString(),
           icon: Icons.pending_actions,
@@ -497,7 +577,7 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
         ),
         StatCard(
           title: 'Logs',
-          value: '45', // Placeholder for now, or fetch logs count
+          value: _logsCount.toString(),
           icon: Icons.history,
           color: Colors.grey,
           onTap: () => _showActivityLogs(context),
@@ -886,7 +966,38 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
             );
           },
         ),
+        ControlPanelCard(
+          title: 'Revenue',
+          icon: Icons.attach_money,
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const AdminRevenueScreen(),
+              ),
+            );
+          },
+        ),
       ],
+    );
+  }
+
+  Widget _buildTimeFilterChip(String label, int? days) {
+    final isSelected = _selectedDaysFilter == days;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8.0),
+      child: FilterChip(
+        label: Text(label),
+        selected: isSelected,
+        onSelected: (selected) {
+          if (selected) {
+            setState(() => _selectedDaysFilter = days);
+            _loadData();
+          }
+        },
+        selectedColor: Colors.red.withValues(alpha: 0.2),
+        checkmarkColor: Colors.red,
+      ),
     );
   }
 

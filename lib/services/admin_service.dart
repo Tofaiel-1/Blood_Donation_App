@@ -190,6 +190,121 @@ class AdminService {
     await _logAudit(action: 'DELETE_ADMIN', targetUserId: adminId);
   }
 
+  /// Promote regular user to admin (Super Admin only)
+  Future<void> promoteToAdmin({
+    required String userId,
+    String? organization,
+    List<String> permissions = const ['manage_requests', 'view_analytics'],
+  }) async {
+    final currentUser = _auth.currentUser;
+    if (currentUser == null) throw Exception('Not authenticated');
+
+    // Get user data
+    final userDoc = await _firestore.collection('users').doc(userId).get();
+    if (!userDoc.exists) {
+      throw Exception('User not found');
+    }
+
+    final userData = userDoc.data()!;
+    final userName = userData['name'] ?? 'Unknown';
+    final userEmail = userData['email'] ?? '';
+
+    // Update user role to admin
+    await _firestore.collection('users').doc(userId).update({
+      'role': 'orgAdmin',
+      'organization': organization,
+      'permissions': permissions,
+      'promotedAt': FieldValue.serverTimestamp(),
+      'promotedBy': currentUser.uid,
+    });
+
+    // Log audit
+    await _logAudit(
+      action: 'PROMOTE_TO_ADMIN',
+      targetUserId: userId,
+      details: {
+        'userName': userName,
+        'userEmail': userEmail,
+        'organization': organization,
+        'permissions': permissions,
+      },
+    );
+
+    // Log activity
+    await _activityLog.logAdminAction(
+      action: 'User Promoted to Admin',
+      description: 'User "$userName" ($userEmail) was promoted to admin',
+      targetUserId: userId,
+      targetUserName: userName,
+      details: {'organization': organization, 'permissions': permissions},
+    );
+  }
+
+  /// Demote admin to regular user (Super Admin only)
+  Future<void> demoteFromAdmin({
+    required String adminId,
+    String? bloodType,
+  }) async {
+    final currentUser = _auth.currentUser;
+    if (currentUser == null) throw Exception('Not authenticated');
+
+    // Get admin data
+    final adminDoc = await _firestore.collection('users').doc(adminId).get();
+    if (!adminDoc.exists) {
+      throw Exception('Admin not found');
+    }
+
+    final adminData = adminDoc.data()!;
+    final adminName = adminData['name'] ?? 'Unknown';
+    final adminEmail = adminData['email'] ?? '';
+
+    // Update admin role to regular user
+    await _firestore.collection('users').doc(adminId).update({
+      'role': 'user',
+      'bloodType': bloodType ?? 'A+',
+      'organization': FieldValue.delete(),
+      'permissions': FieldValue.delete(),
+      'demotedAt': FieldValue.serverTimestamp(),
+      'demotedBy': currentUser.uid,
+    });
+
+    // Log audit
+    await _logAudit(
+      action: 'DEMOTE_FROM_ADMIN',
+      targetUserId: adminId,
+      details: {
+        'adminName': adminName,
+        'adminEmail': adminEmail,
+        'newBloodType': bloodType,
+      },
+    );
+
+    // Log activity
+    await _activityLog.logAdminAction(
+      action: 'Admin Demoted to User',
+      description:
+          'Admin "$adminName" ($adminEmail) was demoted to regular user',
+      targetUserId: adminId,
+      targetUserName: adminName,
+      details: {'bloodType': bloodType},
+    );
+  }
+
+  /// Get all regular users (for promotion to admin)
+  Stream<List<Map<String, dynamic>>> getAllRegularUsers() {
+    return _firestore
+        .collection('users')
+        .where('role', isEqualTo: 'user')
+        .snapshots()
+        .map(
+          (snapshot) => snapshot.docs.map((doc) {
+            final data = doc.data();
+            data['id'] = doc.id;
+            return data;
+          }).toList(),
+        );
+  }
+
   // ==================== BLOOD REQUEST MANAGEMENT ====================
 
   /// Get all blood requests (Super Admin)

@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart' as auth;
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../models/user.dart';
+import '../../services/location_service.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -29,11 +31,15 @@ class _SearchScreenState extends State<SearchScreen> {
   String sortBy = 'relevance';
   List<String> recentQueries = [];
   String? currentUserLocation;
+  Position? _currentPosition;
+  bool _isLoadingLocation = false;
+  Map<String, double> _donorDistances = {}; // Store calculated distances
 
   bool isEmergencyMode = false;
   String selectedUrgency = 'all';
   bool showNearbyOnly = false;
   String donorType = 'all';
+  bool sortByDistance = false;
 
   final List<String> bloodTypes = [
     'A+',
@@ -52,6 +58,7 @@ class _SearchScreenState extends State<SearchScreen> {
     _loadDonorsFromFirebase();
     _searchController.addListener(_onSearchChanged);
     _ensureDemoData();
+    _getCurrentLocation();
   }
 
   void _onSearchChanged() {
@@ -61,6 +68,56 @@ class _SearchScreenState extends State<SearchScreen> {
         _performSearch();
       }
     });
+  }
+
+  Future<void> _getCurrentLocation() async {
+    setState(() => _isLoadingLocation = true);
+    try {
+      final position = await LocationService.getCurrentLocation();
+      if (position != null && mounted) {
+        setState(() {
+          _currentPosition = position;
+          _isLoadingLocation = false;
+        });
+        // Recalculate distances for current results
+        _calculateDistancesForResults();
+      } else {
+        setState(() => _isLoadingLocation = false);
+      }
+    } catch (e) {
+      debugPrint('Error getting location: $e');
+      setState(() => _isLoadingLocation = false);
+    }
+  }
+
+  void _calculateDistancesForResults() {
+    if (_currentPosition == null) return;
+
+    for (var donor in searchResults) {
+      if (donor.latitude != null && donor.longitude != null) {
+        final distance = LocationService.calculateDistance(
+          _currentPosition!.latitude,
+          _currentPosition!.longitude,
+          donor.latitude!,
+          donor.longitude!,
+        );
+        _donorDistances[donor.id ?? ''] = distance;
+      }
+    }
+
+    // Re-sort if sorting by distance
+    if (sortByDistance) {
+      _sortResultsByDistance();
+    }
+  }
+
+  void _sortResultsByDistance() {
+    searchResults.sort((a, b) {
+      final distA = _donorDistances[a.id ?? ''] ?? double.infinity;
+      final distB = _donorDistances[b.id ?? ''] ?? double.infinity;
+      return distA.compareTo(distB);
+    });
+    setState(() {});
   }
 
   Future<void> _ensureDemoData() async {
@@ -326,6 +383,29 @@ class _SearchScreenState extends State<SearchScreen> {
         return User.fromMap(data);
       }).toList();
 
+      // Calculate distances for all results if location is available
+      if (_currentPosition != null) {
+        for (var user in results) {
+          if (user.latitude != null && user.longitude != null) {
+            final distance = LocationService.calculateDistance(
+              _currentPosition!.latitude,
+              _currentPosition!.longitude,
+              user.latitude!,
+              user.longitude!,
+            );
+            _donorDistances[user.id ?? ''] = distance;
+          }
+        }
+      }
+
+      // Filter by distance if needed
+      if (showNearbyOnly && _currentPosition != null) {
+        results = results.where((user) {
+          final distance = _donorDistances[user.id ?? ''];
+          return distance != null && distance <= maxDistance;
+        }).toList();
+      }
+
       results = results.where((user) {
         bool matchesText =
             query.isEmpty ||
@@ -340,7 +420,14 @@ class _SearchScreenState extends State<SearchScreen> {
         return matchesText && matchesLocation;
       }).toList();
 
-      if (sortBy == 'lastDonation') {
+      // Sorting logic
+      if (sortByDistance && _currentPosition != null) {
+        results.sort((a, b) {
+          final distA = _donorDistances[a.id ?? ''] ?? double.infinity;
+          final distB = _donorDistances[b.id ?? ''] ?? double.infinity;
+          return distA.compareTo(distB);
+        });
+      } else if (sortBy == 'lastDonation') {
         results.sort((a, b) {
           if (a.lastDonationDate == null && b.lastDonationDate == null) {
             return 0;
@@ -531,6 +618,28 @@ class _SearchScreenState extends State<SearchScreen> {
                 },
                 activeColor: Colors.red[700],
               ),
+              SizedBox(height: 10),
+              SwitchListTile(
+                title: Text('Show nearby donors only'),
+                subtitle: Text(
+                  'Filter donors within ${maxDistance.round()} km',
+                ),
+                value: showNearbyOnly,
+                onChanged: _currentPosition != null
+                    ? (value) {
+                        setModalState(() => showNearbyOnly = value);
+                      }
+                    : null,
+                activeColor: Colors.red[700],
+              ),
+              if (_currentPosition == null)
+                Padding(
+                  padding: EdgeInsets.only(left: 16),
+                  child: Text(
+                    'Enable location to filter by distance',
+                    style: TextStyle(fontSize: 12, color: Colors.orange[700]),
+                  ),
+                ),
               SizedBox(height: 20),
               SwitchListTile(
                 title: Text('Available donors only'),
@@ -538,6 +647,21 @@ class _SearchScreenState extends State<SearchScreen> {
                 onChanged: (value) {
                   setModalState(() => availableOnly = value);
                 },
+                activeColor: Colors.red[700],
+              ),
+              SizedBox(height: 10),
+              SwitchListTile(
+                title: Text('Sort by distance'),
+                subtitle: Text('Show nearest donors first'),
+                value: sortByDistance,
+                onChanged: _currentPosition != null
+                    ? (value) {
+                        setModalState(() {
+                          sortByDistance = value;
+                          if (value) sortBy = 'distance';
+                        });
+                      }
+                    : null,
                 activeColor: Colors.red[700],
               ),
               Spacer(),
@@ -552,6 +676,8 @@ class _SearchScreenState extends State<SearchScreen> {
                           availableOnly = true;
                           donorType = 'all';
                           selectedUrgency = 'all';
+                          showNearbyOnly = false;
+                          sortByDistance = false;
                         });
                       },
                       child: Text('Reset'),
@@ -940,6 +1066,37 @@ class _SearchScreenState extends State<SearchScreen> {
                       style: TextStyle(color: Colors.grey[700], fontSize: 14),
                     ),
                   ),
+                  // Display distance if available
+                  if (_donorDistances[donor.id ?? ''] != null) ...[
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      margin: EdgeInsets.only(right: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.orange[50],
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.orange[300]!),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.near_me,
+                            size: 12,
+                            color: Colors.orange[700],
+                          ),
+                          SizedBox(width: 2),
+                          Text(
+                            '${_donorDistances[donor.id ?? '']!.toStringAsFixed(1)} km',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.orange[700],
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   Container(
                     padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
@@ -1022,6 +1179,23 @@ class _SearchScreenState extends State<SearchScreen> {
                       ),
                     ),
                   ),
+                  SizedBox(width: 8),
+                  // Google Maps Direction button
+                  if (_currentPosition != null &&
+                      donor.latitude != null &&
+                      donor.longitude != null)
+                    Expanded(
+                      flex: 1,
+                      child: IconButton(
+                        icon: Icon(Icons.directions),
+                        color: Colors.blue[700],
+                        onPressed: () => _openGoogleMapsDirections(donor),
+                        style: IconButton.styleFrom(
+                          backgroundColor: Colors.blue[50],
+                        ),
+                        tooltip: 'Get Directions',
+                      ),
+                    ),
                   SizedBox(width: 8),
                   Expanded(
                     flex: 1,
@@ -1164,6 +1338,75 @@ class _SearchScreenState extends State<SearchScreen> {
               textColor: Colors.white,
               onPressed: () => _sendMessage(donor),
             ),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _openGoogleMapsDirections(User donor) async {
+    if (_currentPosition == null ||
+        donor.latitude == null ||
+        donor.longitude == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Location information not available'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    try {
+      // Google Maps URL scheme for directions
+      final Uri googleMapsUrl = Uri.parse(
+        'https://www.google.com/maps/dir/?api=1'
+        '&origin=${_currentPosition!.latitude},${_currentPosition!.longitude}'
+        '&destination=${donor.latitude},${donor.longitude}'
+        '&travelmode=driving'
+        '&dir_action=navigate',
+      );
+
+      // Try to launch Google Maps
+      if (await canLaunchUrl(googleMapsUrl)) {
+        await launchUrl(googleMapsUrl, mode: LaunchMode.externalApplication);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.directions, color: Colors.white),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text('Opening directions to ${donor.name}...'),
+                  ),
+                ],
+              ),
+              backgroundColor: Colors.blue[700],
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      } else {
+        // Fallback: Open in browser
+        final Uri browserUrl = Uri.parse(
+          'https://www.google.com/maps/search/?api=1'
+          '&query=${donor.latitude},${donor.longitude}',
+        );
+
+        if (await canLaunchUrl(browserUrl)) {
+          await launchUrl(browserUrl, mode: LaunchMode.externalApplication);
+        } else {
+          throw Exception('Could not open maps');
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error opening maps: $e'),
+            backgroundColor: Colors.red,
           ),
         );
       }

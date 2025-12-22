@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:math';
+import 'blood_compatibility_service.dart';
 
 /// AI-Powered Smart Matching Service
 /// Automatically match donors to blood requests with high success rate
@@ -12,7 +13,7 @@ class SmartMatchingService {
   factory SmartMatchingService() => _instance;
   SmartMatchingService._internal();
 
-  /// Match donors to a blood request
+  /// Match donors to a blood request with blood compatibility
   Future<List<Map<String, dynamic>>> matchDonorsToRequest({
     required String requestId,
     required String bloodType,
@@ -20,11 +21,22 @@ class SmartMatchingService {
     required double longitude,
     required String urgency, // critical, urgent, normal
     int maxResults = 20,
+    double maxDistance = 50.0, // Maximum distance in km
   }) async {
-    // Get all eligible donors with matching blood type
+    // Get compatible blood types for recipient
+    final compatibleBloodTypes = BloodCompatibilityService.getCompatibleDonors(
+      bloodType,
+    );
+
+    // Query donors with compatible blood types
     final donorsSnapshot = await _firestore
         .collection('users')
-        .where('bloodType', isEqualTo: bloodType)
+        .where(
+          'bloodType',
+          whereIn: compatibleBloodTypes.isEmpty
+              ? [bloodType]
+              : compatibleBloodTypes,
+        )
         .where('isAvailableToDonate', isEqualTo: true)
         .get();
 
@@ -34,6 +46,23 @@ class SmartMatchingService {
       final donorData = doc.data();
       final donorId = doc.id;
 
+      // Calculate distance first
+      final distance = _calculateDistance(
+        latitude,
+        longitude,
+        donorData['latitude'] ?? 0.0,
+        donorData['longitude'] ?? 0.0,
+      );
+
+      // Skip donors beyond max distance
+      if (distance > maxDistance) continue;
+
+      // Calculate blood compatibility score
+      final compatibilityScore = BloodCompatibilityService.getPriorityScore(
+        donorBloodType: donorData['bloodType'] ?? '',
+        recipientBloodType: bloodType,
+      );
+
       // Calculate match score
       final score = await _calculateMatchScore(
         donorId: donorId,
@@ -41,6 +70,7 @@ class SmartMatchingService {
         requestLatitude: latitude,
         requestLongitude: longitude,
         urgency: urgency,
+        compatibilityScore: compatibilityScore,
       );
 
       matches.add({
@@ -49,22 +79,26 @@ class SmartMatchingService {
         'bloodType': donorData['bloodType'],
         'phone': donorData['phone'],
         'location': donorData['district'] ?? 'Unknown',
+        'latitude': donorData['latitude'] ?? 0.0,
+        'longitude': donorData['longitude'] ?? 0.0,
         'totalDonations': donorData['totalDonations'] ?? 0,
         'lastDonationDate': donorData['lastDonationDate'],
         'score': score,
-        'distance': _calculateDistance(
-          latitude,
-          longitude,
-          donorData['latitude'] ?? 0.0,
-          donorData['longitude'] ?? 0.0,
-        ),
+        'distance': distance,
+        'distanceFormatted': '${distance.toStringAsFixed(1)} km',
         'reliability': _calculateReliability(donorData),
         'responseTime': _estimateResponseTime(donorData),
+        'compatibilityScore': compatibilityScore,
+        'isExactMatch': donorData['bloodType'] == bloodType,
       });
     }
 
-    // Sort by score (highest first)
-    matches.sort((a, b) => b['score'].compareTo(a['score']));
+    // Sort by score (highest first) and then by distance (nearest first)
+    matches.sort((a, b) {
+      final scoreCompare = b['score'].compareTo(a['score']);
+      if (scoreCompare != 0) return scoreCompare;
+      return (a['distance'] as double).compareTo(b['distance'] as double);
+    });
 
     // Return top matches
     return matches.take(maxResults).toList();
@@ -77,10 +111,11 @@ class SmartMatchingService {
     required double requestLatitude,
     required double requestLongitude,
     required String urgency,
+    required int compatibilityScore,
   }) async {
-    double score = 100.0;
+    double score = 0.0;
 
-    // 1. Distance Score (30%)
+    // 1. Distance Score (35%) - Higher weight for critical cases
     final distance = _calculateDistance(
       requestLatitude,
       requestLongitude,
@@ -88,19 +123,18 @@ class SmartMatchingService {
       donorData['longitude'] ?? 0.0,
     );
     final distanceScore = _getDistanceScore(distance);
-    score *= (distanceScore * 0.30);
+    score += (distanceScore * 0.35);
 
-    // 2. Availability Score (25%)
+    // 2. Blood Compatibility Score (20%)
+    score += (compatibilityScore / 100.0) * 20;
+
+    // 3. Availability Score (20%)
     final availabilityScore = _getAvailabilityScore(donorData);
-    score += (availabilityScore * 0.25);
+    score += (availabilityScore * 0.20);
 
-    // 3. Reliability Score (20%)
+    // 4. Reliability Score (15%)
     final reliabilityScore = await _getReliabilityScore(donorId);
-    score += (reliabilityScore * 0.20);
-
-    // 4. Eligibility Score (15%)
-    final eligibilityScore = _getEligibilityScore(donorData);
-    score += (eligibilityScore * 0.15);
+    score += (reliabilityScore * 0.15);
 
     // 5. Response Time Score (10%)
     final responseScore = await _getResponseTimeScore(donorId);
@@ -108,8 +142,11 @@ class SmartMatchingService {
 
     // Urgency multiplier
     if (urgency == 'critical') {
-      // Prioritize distance for critical cases
-      score *= 1.2;
+      // For critical cases, heavily prioritize distance and availability
+      score *= 1.3;
+      if (distance <= 5.0) score *= 1.2; // Extra boost for very close donors
+    } else if (urgency == 'urgent') {
+      score *= 1.15;
     }
 
     return score.clamp(0.0, 100.0);
@@ -121,8 +158,9 @@ class SmartMatchingService {
     if (distanceKm <= 5) return 90;
     if (distanceKm <= 10) return 75;
     if (distanceKm <= 20) return 50;
-    if (distanceKm <= 50) return 25;
-    return 10;
+    if (distanceKm <= 30) return 30;
+    if (distanceKm <= 50) return 15;
+    return 5; // Very far
   }
 
   /// Availability score

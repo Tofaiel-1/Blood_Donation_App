@@ -1,0 +1,1868 @@
+import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart' as fb_auth;
+import '../../../utils/app_colors.dart';
+import '../dashboard/widgets/create_user_dialog.dart';
+
+/// Dashboard Tab - Main control panel for Admin
+/// Shows REAL statistics and functional operations
+class DashboardTab extends StatelessWidget {
+  final TabController tabController;
+  final VoidCallback onAddAdmin;
+
+  const DashboardTab({
+    super.key,
+    required this.tabController,
+    required this.onAddAdmin,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('users')
+          .where('role', isEqualTo: 'user')
+          .snapshots(),
+      builder: (context, usersSnapshot) {
+        return StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance
+              .collection('donations')
+              .snapshots(),
+          builder: (context, donationsSnapshot) {
+            return StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('events')
+                  .snapshots(),
+              builder: (context, eventsSnapshot) {
+                if (usersSnapshot.connectionState == ConnectionState.waiting ||
+                    donationsSnapshot.connectionState ==
+                        ConnectionState.waiting ||
+                    eventsSnapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                // Calculate REAL statistics
+                final totalUsers = usersSnapshot.data?.docs.length ?? 0;
+
+                // Approved donors (users who have donated at least once)
+                final approvedDonors =
+                    usersSnapshot.data?.docs.where((d) {
+                      final data = d.data() as Map<String, dynamic>;
+                      return (data['totalDonations'] ?? 0) > 0;
+                    }).length ??
+                    0;
+
+                // Total events
+                final totalEvents = eventsSnapshot.data?.docs.length ?? 0;
+
+                // Completed donations
+                final completedDonations =
+                    donationsSnapshot.data?.docs.where((d) {
+                      final data = d.data() as Map<String, dynamic>;
+                      return data['status'] == 'completed';
+                    }).length ??
+                    0;
+
+                // Pending donations
+                final pendingDonations =
+                    donationsSnapshot.data?.docs.where((d) {
+                      final data = d.data() as Map<String, dynamic>;
+                      return data['status'] == 'pending';
+                    }).length ??
+                    0;
+
+                return SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Header with logout
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Admin Dashboard',
+                            style: Theme.of(context).textTheme.headlineSmall
+                                ?.copyWith(fontWeight: FontWeight.bold),
+                          ),
+                          IconButton(
+                            icon: const Icon(
+                              Icons.logout,
+                              color: AppColors.bloodRed,
+                            ),
+                            onPressed: () => _handleLogout(context),
+                            tooltip: 'Logout',
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Statistics Cards (Clickable)
+                      GridView.count(
+                        crossAxisCount: 2,
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        mainAxisSpacing: 16,
+                        crossAxisSpacing: 16,
+                        childAspectRatio: 1.2,
+                        children: [
+                          _buildClickableStatCard(
+                            context: context,
+                            title: 'Total Users',
+                            value: totalUsers.toString(),
+                            icon: Icons.people,
+                            color: Colors.blue,
+                            onTap: () => _showUsersList(
+                              context,
+                              usersSnapshot.data?.docs ?? [],
+                            ),
+                          ),
+                          _buildClickableStatCard(
+                            context: context,
+                            title: 'Approved Donors',
+                            value: approvedDonors.toString(),
+                            icon: Icons.check_circle,
+                            color: Colors.green,
+                            onTap: () => _showApprovedDonorsList(
+                              context,
+                              usersSnapshot.data?.docs ?? [],
+                            ),
+                          ),
+                          _buildClickableStatCard(
+                            context: context,
+                            title: 'Events',
+                            value: totalEvents.toString(),
+                            icon: Icons.event,
+                            color: Colors.orange,
+                            onTap: () => _showEventsList(
+                              context,
+                              eventsSnapshot.data?.docs ?? [],
+                            ),
+                          ),
+                          _buildClickableStatCard(
+                            context: context,
+                            title: 'Completed',
+                            value: completedDonations.toString(),
+                            icon: Icons.done_all,
+                            color: Colors.purple,
+                            onTap: () => _showDonationsList(
+                              context,
+                              donationsSnapshot.data?.docs ?? [],
+                              'completed',
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Pending Card (full width, clickable)
+                      InkWell(
+                        onTap: () => _showDonationsList(
+                          context,
+                          donationsSnapshot.data?.docs ?? [],
+                          'pending',
+                        ),
+                        child: _buildStatCard(
+                          title: 'Pending',
+                          value: pendingDonations.toString(),
+                          icon: Icons.pending,
+                          color: Colors.amber,
+                          fullWidth: true,
+                        ),
+                      ),
+                      const SizedBox(height: 32),
+
+                      // Operations Section
+                      Text(
+                        'Operations',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      GridView.count(
+                        crossAxisCount: 2,
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        mainAxisSpacing: 16,
+                        crossAxisSpacing: 16,
+                        childAspectRatio: 1.1,
+                        children: [
+                          _buildOperationCard(
+                            context: context,
+                            title: 'Add User',
+                            icon: Icons.person_add,
+                            color: AppColors.bloodRed,
+                            onTap: () => _showAddUserDialog(context),
+                          ),
+                          _buildOperationCard(
+                            context: context,
+                            title: 'Manage Users',
+                            icon: Icons.manage_accounts,
+                            color: Colors.blue,
+                            onTap: () => tabController.animateTo(3),
+                          ),
+                          _buildOperationCard(
+                            context: context,
+                            title: 'Org Info',
+                            icon: Icons.info,
+                            color: Colors.teal,
+                            onTap: () => _showOrgInfoDialog(context),
+                          ),
+                          _buildOperationCard(
+                            context: context,
+                            title: 'Create Event',
+                            icon: Icons.add_box,
+                            color: Colors.orange,
+                            onTap: () => _showCreateEventDialog(context),
+                          ),
+                          _buildOperationCard(
+                            context: context,
+                            title: 'Donation Status',
+                            icon: Icons.bloodtype,
+                            color: Colors.purple,
+                            onTap: () => tabController.animateTo(4),
+                          ),
+                          _buildOperationCard(
+                            context: context,
+                            title: 'Generate Report',
+                            icon: Icons.assessment,
+                            color: Colors.green,
+                            onTap: () => _showReportDialog(context),
+                          ),
+                          _buildOperationCard(
+                            context: context,
+                            title: 'Blood Stats',
+                            icon: Icons.analytics,
+                            color: Colors.indigo,
+                            onTap: () => _showBloodTypeStats(
+                              context,
+                              usersSnapshot.data?.docs ?? [],
+                            ),
+                          ),
+                          _buildOperationCard(
+                            context: context,
+                            title: 'Emergency Alert',
+                            icon: Icons.emergency,
+                            color: Colors.red[700]!,
+                            onTap: () => _showEmergencyRequestDialog(context),
+                          ),
+                          _buildOperationCard(
+                            context: context,
+                            title: 'Send Notification',
+                            icon: Icons.notifications_active,
+                            color: Colors.amber[700]!,
+                            onTap: () => _showBulkNotificationDialog(context),
+                          ),
+                          _buildOperationCard(
+                            context: context,
+                            title: 'Export Data',
+                            icon: Icons.download,
+                            color: Colors.cyan,
+                            onTap: () => _showExportDialog(context),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
+  /// Build Stat Card
+  Widget _buildStatCard({
+    required String title,
+    required String value,
+    required IconData icon,
+    required Color color,
+    bool fullWidth = false,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 40, color: color),
+          const SizedBox(height: 12),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: fullWidth ? 36 : 32,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey[600],
+              fontWeight: FontWeight.w500,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Build Operation Card
+  Widget _buildOperationCard({
+    required BuildContext context,
+    required String title,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: () {
+        print('DEBUG: Operation button clicked: $title');
+        onTap();
+      },
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey[300]!),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 5,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, size: 32, color: color),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              title,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Handle Logout
+  Future<void> _handleLogout(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirm Logout'),
+        content: const Text('Are you sure you want to logout?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.bloodRed,
+            ),
+            child: const Text('Logout'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && context.mounted) {
+      await fb_auth.FirebaseAuth.instance.signOut();
+      if (context.mounted) {
+        Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+      }
+    }
+  }
+
+  /// Show Add User Dialog
+  void _showAddUserDialog(BuildContext context) {
+    print('DEBUG: Add User button clicked');
+    try {
+      showDialog(
+        context: context,
+        builder: (context) => const CreateUserDialog(),
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Opening Add User form...'),
+          duration: Duration(seconds: 1),
+        ),
+      );
+    } catch (e) {
+      print('ERROR in Add User: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
+    }
+  }
+
+  /// Show Org Info Dialog
+  void _showOrgInfoDialog(BuildContext context) {
+    print('DEBUG: Org Info button clicked');
+    try {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.info, color: AppColors.bloodRed),
+            SizedBox(width: 8),
+            Text('Organization Info'),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: StreamBuilder<DocumentSnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('users')
+                .doc(fb_auth.FirebaseAuth.instance.currentUser?.uid)
+                .snapshots(),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) {
+                return const CircularProgressIndicator();
+              }
+
+              final data = snapshot.data?.data() as Map<String, dynamic>?;
+              final orgName = data?['organization'] ?? 'Not Set';
+              final adminName = data?['name'] ?? 'Unknown';
+              final email = data?['email'] ?? 'No Email';
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildInfoRow('Admin Name', adminName),
+                  const Divider(),
+                  _buildInfoRow('Email', email),
+                  const Divider(),
+                  _buildInfoRow('Organization', orgName),
+                  const Divider(),
+                  _buildInfoRow('Role', 'Admin'),
+                ],
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 100,
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.grey,
+              ),
+            ),
+          ),
+          Expanded(child: Text(value, style: const TextStyle(fontSize: 16))),
+        ],
+      ),
+    );
+  }
+
+  /// Show Create Event Dialog
+  void _showCreateEventDialog(BuildContext context) {
+    print('DEBUG: Create Event button clicked');
+    final titleController = TextEditingController();
+    final descriptionController = TextEditingController();
+    final locationController = TextEditingController();
+
+    try {
+      showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.event, color: AppColors.bloodRed),
+            SizedBox(width: 8),
+            Text('Create New Event'),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: titleController,
+                decoration: const InputDecoration(
+                  labelText: 'Event Title',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: descriptionController,
+                decoration: const InputDecoration(
+                  labelText: 'Description',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 3,
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: locationController,
+                decoration: const InputDecoration(
+                  labelText: 'Location',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (titleController.text.isNotEmpty) {
+                try {
+                  print('DEBUG: Creating event: ${titleController.text}');
+                  await FirebaseFirestore.instance.collection('events').add({
+                    'title': titleController.text,
+                    'description': descriptionController.text,
+                    'location': locationController.text,
+                    'createdBy': fb_auth.FirebaseAuth.instance.currentUser?.uid,
+                    'createdAt': FieldValue.serverTimestamp(),
+                    'status': 'upcoming',
+                  });
+                  print('DEBUG: Event created successfully');
+
+                  if (context.mounted) {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Event created successfully!'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  print('ERROR creating event: $e');
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Error creating event: $e'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                }
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please enter event title'),
+                    backgroundColor: Colors.orange,
+                  ),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.bloodRed,
+            ),
+            child: const Text('Create Event'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Build Clickable Stat Card
+  Widget _buildClickableStatCard({
+    required BuildContext context,
+    required String title,
+    required String value,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: _buildStatCard(
+        title: title,
+        value: value,
+        icon: icon,
+        color: color,
+      ),
+    );
+  }
+
+  /// Show Users List
+  void _showUsersList(BuildContext context, List<QueryDocumentSnapshot> users) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.people, color: AppColors.bloodRed),
+            const SizedBox(width: 8),
+            Text('Total Users (${users.length})'),
+          ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          height: 400,
+          child: users.isEmpty
+              ? const Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.people_outline, size: 64, color: Colors.grey),
+                      SizedBox(height: 16),
+                      Text(
+                        'No users yet',
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                )
+              : ListView.builder(
+                  itemCount: users.length,
+                  itemBuilder: (context, index) {
+                    final data = users[index].data() as Map<String, dynamic>;
+                    final name = data['name'] ?? 'Unknown';
+                    final email = data['email'] ?? '';
+                    final bloodType = data['bloodType'] ?? 'N/A';
+                    final phone = data['phone'] ?? '';
+
+                    return ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: AppColors.bloodRed,
+                        child: Text(
+                          name[0].toUpperCase(),
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                      ),
+                      title: Text(
+                        name,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      subtitle: Text(
+                        '$bloodType${email.isNotEmpty ? " • $email" : ""}',
+                      ),
+                      trailing: phone.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(
+                                Icons.phone,
+                                color: Colors.green,
+                              ),
+                              onPressed: () {
+                                // Could open dialer here
+                              },
+                            )
+                          : null,
+                    );
+                  },
+                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Show Approved Donors List
+  void _showApprovedDonorsList(
+    BuildContext context,
+    List<QueryDocumentSnapshot> users,
+  ) {
+    final donors = users.where((d) {
+      final data = d.data() as Map<String, dynamic>;
+      return (data['totalDonations'] ?? 0) > 0;
+    }).toList();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.check_circle, color: Colors.green),
+            const SizedBox(width: 8),
+            Text('Approved Donors (${donors.length})'),
+          ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          height: 400,
+          child: donors.isEmpty
+              ? const Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.volunteer_activism,
+                        size: 64,
+                        color: Colors.grey,
+                      ),
+                      SizedBox(height: 16),
+                      Text(
+                        'No donors yet',
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                )
+              : ListView.builder(
+                  itemCount: donors.length,
+                  itemBuilder: (context, index) {
+                    final data = donors[index].data() as Map<String, dynamic>;
+                    final name = data['name'] ?? 'Unknown';
+                    final bloodType = data['bloodType'] ?? 'N/A';
+                    final totalDonations = data['totalDonations'] ?? 0;
+                    final livesSaved = data['livesSaved'] ?? 0;
+
+                    return Card(
+                      margin: const EdgeInsets.symmetric(vertical: 4),
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: Colors.green,
+                          child: Text(
+                            bloodType,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        title: Text(
+                          name,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        subtitle: Text(
+                          'Donations: $totalDonations • Lives Saved: $livesSaved',
+                        ),
+                        trailing: const Icon(
+                          Icons.verified,
+                          color: Colors.green,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Show Events List
+  void _showEventsList(
+    BuildContext context,
+    List<QueryDocumentSnapshot> events,
+  ) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.event, color: Colors.orange),
+            const SizedBox(width: 8),
+            Text('Events (${events.length})'),
+          ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          height: 400,
+          child: events.isEmpty
+              ? const Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.event_busy, size: 64, color: Colors.grey),
+                      SizedBox(height: 16),
+                      Text(
+                        'No events yet',
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                )
+              : ListView.builder(
+                  itemCount: events.length,
+                  itemBuilder: (context, index) {
+                    final data = events[index].data() as Map<String, dynamic>;
+                    final title = data['title'] ?? 'Untitled Event';
+                    final description = data['description'] ?? '';
+                    final location = data['location'] ?? 'Location TBD';
+                    final status = data['status'] ?? 'upcoming';
+
+                    return Card(
+                      margin: const EdgeInsets.symmetric(vertical: 4),
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: Colors.orange,
+                          child: const Icon(
+                            Icons.event,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                        ),
+                        title: Text(
+                          title,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (description.isNotEmpty)
+                              Text(
+                                description,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            Text(
+                              '📍 $location',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ],
+                        ),
+                        trailing: Chip(
+                          label: Text(
+                            status.toUpperCase(),
+                            style: const TextStyle(fontSize: 10),
+                          ),
+                          backgroundColor: status == 'completed'
+                              ? Colors.green[100]
+                              : Colors.orange[100],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Show Donations List
+  void _showDonationsList(
+    BuildContext context,
+    List<QueryDocumentSnapshot> allDonations,
+    String filterStatus,
+  ) {
+    final donations = allDonations.where((d) {
+      final data = d.data() as Map<String, dynamic>;
+      return data['status'] == filterStatus;
+    }).toList();
+
+    final title = filterStatus == 'completed'
+        ? 'Completed Donations'
+        : 'Pending Donations';
+    final color = filterStatus == 'completed' ? Colors.purple : Colors.amber;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(
+              filterStatus == 'completed' ? Icons.done_all : Icons.pending,
+              color: color,
+            ),
+            const SizedBox(width: 8),
+            Text('$title (${donations.length})'),
+          ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          height: 400,
+          child: donations.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.bloodtype_outlined,
+                        size: 64,
+                        color: Colors.grey,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'No $filterStatus donations',
+                        style: const TextStyle(color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                )
+              : ListView.builder(
+                  itemCount: donations.length,
+                  itemBuilder: (context, index) {
+                    final data =
+                        donations[index].data() as Map<String, dynamic>;
+                    final donorName = data['donorName'] ?? 'Anonymous';
+                    final bloodType = data['bloodType'] ?? 'N/A';
+                    final units = data['units'] ?? 1;
+                    final date = data['date'];
+
+                    return Card(
+                      margin: const EdgeInsets.symmetric(vertical: 4),
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: color,
+                          child: Text(
+                            bloodType,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        title: Text(
+                          donorName,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        subtitle: Text(
+                          '$units unit(s) • ${date != null ? _formatDate(date) : "Date TBD"}',
+                        ),
+                        trailing: Icon(
+                          filterStatus == 'completed'
+                              ? Icons.check_circle
+                              : Icons.schedule,
+                          color: color,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Show Report Dialog
+  void _showReportDialog(BuildContext context) {
+    print('DEBUG: Generate Report button clicked');
+    try {
+      showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.assessment, color: AppColors.bloodRed),
+            SizedBox(width: 8),
+            Text('Generate Report'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.people, color: Colors.blue),
+              title: const Text('Users Report'),
+              subtitle: const Text('Export all users data'),
+              trailing: const Icon(Icons.download),
+              onTap: () {
+                Navigator.pop(context);
+                _generateUsersReport(context);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.bloodtype, color: Colors.red),
+              title: const Text('Donations Report'),
+              subtitle: const Text('Export all donations data'),
+              trailing: const Icon(Icons.download),
+              onTap: () {
+                Navigator.pop(context);
+                _generateDonationsReport(context);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.event, color: Colors.orange),
+              title: const Text('Events Report'),
+              subtitle: const Text('Export all events data'),
+              trailing: const Icon(Icons.download),
+              onTap: () {
+                Navigator.pop(context);
+                _generateEventsReport(context);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.analytics, color: Colors.purple),
+              title: const Text('Full Analytics'),
+              subtitle: const Text('Complete system report'),
+              trailing: const Icon(Icons.download),
+              onTap: () {
+                Navigator.pop(context);
+                _generateFullReport(context);
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+    } catch (e) {
+      print('ERROR in Generate Report: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error showing report dialog: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  /// Generate Users Report
+  Future<void> _generateUsersReport(BuildContext context) async {
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .where('role', isEqualTo: 'user')
+          .get();
+
+      final report = StringBuffer();
+      report.writeln('USERS REPORT');
+      report.writeln('Generated: ${DateTime.now()}');
+      report.writeln('Total Users: ${snapshot.docs.length}');
+      report.writeln('\n${'=' * 50}\n');
+
+      for (var doc in snapshot.docs) {
+        final data = doc.data();
+        report.writeln('Name: ${data['name'] ?? 'N/A'}');
+        report.writeln('Email: ${data['email'] ?? 'N/A'}');
+        report.writeln('Blood Type: ${data['bloodType'] ?? 'N/A'}');
+        report.writeln('Phone: ${data['phone'] ?? 'N/A'}');
+        report.writeln('Total Donations: ${data['totalDonations'] ?? 0}');
+        report.writeln('-' * 50);
+      }
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Users report generated (${snapshot.docs.length} users)',
+            ),
+            action: SnackBarAction(
+              label: 'View',
+              onPressed: () {
+                showDialog(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text('Users Report'),
+                    content: SingleChildScrollView(
+                      child: Text(report.toString()),
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Close'),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    }
+  }
+
+  /// Generate Donations Report
+  Future<void> _generateDonationsReport(BuildContext context) async {
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('donations')
+          .get();
+
+      final completed = snapshot.docs
+          .where((d) => (d.data())['status'] == 'completed')
+          .length;
+      final pending = snapshot.docs
+          .where((d) => (d.data())['status'] == 'pending')
+          .length;
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Donations: Total ${snapshot.docs.length}, Completed $completed, Pending $pending',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    }
+  }
+
+  /// Generate Events Report
+  Future<void> _generateEventsReport(BuildContext context) async {
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('events')
+          .get();
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Events report: ${snapshot.docs.length} total events',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    }
+  }
+
+  /// Generate Full Report
+  Future<void> _generateFullReport(BuildContext context) async {
+    try {
+      final users = await FirebaseFirestore.instance
+          .collection('users')
+          .where('role', isEqualTo: 'user')
+          .get();
+      final donations = await FirebaseFirestore.instance
+          .collection('donations')
+          .get();
+      final events = await FirebaseFirestore.instance
+          .collection('events')
+          .get();
+
+      final report =
+          '''
+FULL SYSTEM ANALYTICS REPORT
+Generated: ${DateTime.now()}
+
+USERS:
+- Total Users: ${users.docs.length}
+- Approved Donors: ${users.docs.where((d) => ((d.data())['totalDonations'] ?? 0) > 0).length}
+
+DONATIONS:
+- Total: ${donations.docs.length}
+- Completed: ${donations.docs.where((d) => (d.data())['status'] == 'completed').length}
+- Pending: ${donations.docs.where((d) => (d.data())['status'] == 'pending').length}
+
+EVENTS:
+- Total Events: ${events.docs.length}
+- Upcoming: ${events.docs.where((d) => (d.data())['status'] == 'upcoming').length}
+- Completed: ${events.docs.where((d) => (d.data())['status'] == 'completed').length}
+''';
+
+      if (context.mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Full Analytics Report'),
+            content: SingleChildScrollView(child: Text(report)),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Close'),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    }
+  }
+
+  /// Format date helper
+  String _formatDate(dynamic date) {
+    if (date == null) return 'N/A';
+    try {
+      if (date is Timestamp) {
+        final dt = date.toDate();
+        return '${dt.day}/${dt.month}/${dt.year}';
+      }
+      return date.toString();
+    } catch (e) {
+      return 'N/A';
+    }
+  }
+
+  /// Show Blood Type Statistics
+  void _showBloodTypeStats(
+    BuildContext context,
+    List<QueryDocumentSnapshot> users,
+  ) {
+    print('DEBUG: Blood Stats button clicked');
+    try {
+      // Count by blood type
+      final Map<String, int> bloodTypeCount = {};
+      final bloodTypes = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
+
+      for (var type in bloodTypes) {
+        bloodTypeCount[type] = 0;
+      }
+
+      for (var user in users) {
+        final data = user.data() as Map<String, dynamic>;
+        final bloodType = data['bloodType'];
+        if (bloodType != null && bloodTypeCount.containsKey(bloodType)) {
+          bloodTypeCount[bloodType] = bloodTypeCount[bloodType]! + 1;
+        }
+      }
+
+      print('DEBUG: Blood type stats calculated: $bloodTypeCount');
+
+      showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.analytics, color: Colors.indigo),
+            SizedBox(width: 8),
+            Text('Blood Type Statistics'),
+          ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView(
+            shrinkWrap: true,
+            children: bloodTypes.map((type) {
+              final count = bloodTypeCount[type] ?? 0;
+              return Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: count > 0 ? Colors.red : Colors.grey,
+                    child: Text(
+                      type,
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                    ),
+                  ),
+                  title: Text(
+                    'Blood Type $type',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  trailing: Chip(
+                    label: Text('$count users'),
+                    backgroundColor: count > 0
+                        ? Colors.green[100]
+                        : Colors.grey[200],
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Show Emergency Request Dialog
+  void _showEmergencyRequestDialog(BuildContext context) {
+    print('DEBUG: Emergency Alert button clicked');
+    final unitsController = TextEditingController();
+    final locationController = TextEditingController();
+    final notesController = TextEditingController();
+    String selectedBloodType = 'A+';
+
+    try {
+      showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.emergency, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Create Emergency Request'),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<String>(
+                value: selectedBloodType,
+                decoration: const InputDecoration(
+                  labelText: 'Blood Type Needed',
+                  border: OutlineInputBorder(),
+                ),
+                items: ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']
+                    .map(
+                      (type) =>
+                          DropdownMenuItem(value: type, child: Text(type)),
+                    )
+                    .toList(),
+                onChanged: (val) => selectedBloodType = val!,
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: unitsController,
+                decoration: const InputDecoration(
+                  labelText: 'Units Needed',
+                  border: OutlineInputBorder(),
+                ),
+                keyboardType: TextInputType.number,
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: locationController,
+                decoration: const InputDecoration(
+                  labelText: 'Hospital/Location',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: notesController,
+                decoration: const InputDecoration(
+                  labelText: 'Additional Notes',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 3,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (locationController.text.isNotEmpty) {
+                try {
+                  await FirebaseFirestore.instance
+                      .collection('bloodRequests')
+                      .add({
+                        'bloodType': selectedBloodType,
+                        'units': int.tryParse(unitsController.text) ?? 1,
+                        'location': locationController.text,
+                        'notes': notesController.text,
+                        'status': 'urgent',
+                        'isEmergency': true,
+                        'createdBy':
+                            fb_auth.FirebaseAuth.instance.currentUser?.uid,
+                        'createdAt': FieldValue.serverTimestamp(),
+                        'requestDate': DateTime.now(),
+                      });
+
+                  if (context.mounted) {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Emergency request created successfully!',
+                        ),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(SnackBar(content: Text('Error: $e')));
+                  }
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700]),
+            child: const Text('Create Emergency Request'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Show Bulk Notification Dialog
+  void _showBulkNotificationDialog(BuildContext context) {
+    final titleController = TextEditingController();
+    final messageController = TextEditingController();
+    String targetAudience = 'all';
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.notifications_active, color: Colors.amber),
+              SizedBox(width: 8),
+              Text('Send Bulk Notification'),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: titleController,
+                  decoration: const InputDecoration(
+                    labelText: 'Notification Title',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: messageController,
+                  decoration: const InputDecoration(
+                    labelText: 'Message',
+                    border: OutlineInputBorder(),
+                  ),
+                  maxLines: 4,
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  value: targetAudience,
+                  decoration: const InputDecoration(
+                    labelText: 'Send To',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'all', child: Text('All Users')),
+                    DropdownMenuItem(
+                      value: 'donors',
+                      child: Text('Donors Only'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'active',
+                      child: Text('Active Users'),
+                    ),
+                  ],
+                  onChanged: (val) => setState(() => targetAudience = val!),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (titleController.text.isNotEmpty &&
+                    messageController.text.isNotEmpty) {
+                  try {
+                    // Get target users based on audience
+                    QuerySnapshot usersSnapshot;
+                    if (targetAudience == 'donors') {
+                      usersSnapshot = await FirebaseFirestore.instance
+                          .collection('users')
+                          .where('isDonor', isEqualTo: true)
+                          .get();
+                    } else {
+                      usersSnapshot = await FirebaseFirestore.instance
+                          .collection('users')
+                          .where('role', isEqualTo: 'user')
+                          .get();
+                    }
+
+                    // Create notification for each user
+                    final batch = FirebaseFirestore.instance.batch();
+                    for (var userDoc in usersSnapshot.docs) {
+                      final notifRef = FirebaseFirestore.instance
+                          .collection('notifications')
+                          .doc();
+                      batch.set(notifRef, {
+                        'userId': userDoc.id,
+                        'title': titleController.text,
+                        'message': messageController.text,
+                        'type': 'admin_announcement',
+                        'isRead': false,
+                        'createdAt': FieldValue.serverTimestamp(),
+                        'createdBy':
+                            fb_auth.FirebaseAuth.instance.currentUser?.uid,
+                      });
+                    }
+
+                    await batch.commit();
+
+                    if (context.mounted) {
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            'Notification sent to ${usersSnapshot.docs.length} users',
+                          ),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(
+                        context,
+                      ).showSnackBar(SnackBar(content: Text('Error: $e')));
+                    }
+                  }
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.amber[700],
+              ),
+              child: const Text('Send Notification'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Show Export Dialog
+  void _showExportDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.download, color: Colors.cyan),
+            SizedBox(width: 8),
+            Text('Export Data'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.people, color: Colors.blue),
+              title: const Text('Export Users'),
+              subtitle: const Text('Download all users data'),
+              onTap: () => _exportUsers(context),
+            ),
+            ListTile(
+              leading: const Icon(Icons.bloodtype, color: Colors.red),
+              title: const Text('Export Donations'),
+              subtitle: const Text('Download all donations data'),
+              onTap: () => _exportDonations(context),
+            ),
+            ListTile(
+              leading: const Icon(Icons.event, color: Colors.orange),
+              title: const Text('Export Events'),
+              subtitle: const Text('Download all events data'),
+              onTap: () => _exportEvents(context),
+            ),
+            ListTile(
+              leading: const Icon(Icons.analytics, color: Colors.green),
+              title: const Text('Export Full Report'),
+              subtitle: const Text('Download complete analytics'),
+              onTap: () => _exportFullData(context),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Export Users
+  Future<void> _exportUsers(BuildContext context) async {
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .where('role', isEqualTo: 'user')
+          .get();
+
+      final csvData = StringBuffer();
+      csvData.writeln('Name,Email,Blood Type,Phone,Total Donations,Created At');
+
+      for (var doc in snapshot.docs) {
+        final data = doc.data();
+        csvData.writeln(
+          '${data['name']},${data['email']},${data['bloodType']},'
+          '${data['phone']},${data['totalDonations'] ?? 0},'
+          '${_formatDate(data['createdAt'])}',
+        );
+      }
+
+      if (context.mounted) {
+        Navigator.pop(context);
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Users Data Export'),
+            content: SingleChildScrollView(
+              child: SelectableText(csvData.toString()),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Close'),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    }
+  }
+
+  /// Export Donations
+  Future<void> _exportDonations(BuildContext context) async {
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('donations')
+          .get();
+
+      final csvData = StringBuffer();
+      csvData.writeln('Donor ID,Blood Type,Units,Status,Date,Location');
+
+      for (var doc in snapshot.docs) {
+        final data = doc.data();
+        csvData.writeln(
+          '${data['donorId']},${data['bloodType']},${data['units']},'
+          '${data['status']},${_formatDate(data['donationDate'])},'
+          '${data['location'] ?? 'N/A'}',
+        );
+      }
+
+      if (context.mounted) {
+        Navigator.pop(context);
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Donations Data Export'),
+            content: SingleChildScrollView(
+              child: SelectableText(csvData.toString()),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Close'),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    }
+  }
+
+  /// Export Events
+  Future<void> _exportEvents(BuildContext context) async {
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('events')
+          .get();
+
+      final csvData = StringBuffer();
+      csvData.writeln('Title,Description,Location,Status,Created At');
+
+      for (var doc in snapshot.docs) {
+        final data = doc.data();
+        csvData.writeln(
+          '${data['title']},${data['description']},'
+          '${data['location']},${data['status']},'
+          '${_formatDate(data['createdAt'])}',
+        );
+      }
+
+      if (context.mounted) {
+        Navigator.pop(context);
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Events Data Export'),
+            content: SingleChildScrollView(
+              child: SelectableText(csvData.toString()),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Close'),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    }
+  }
+
+  /// Export Full Data
+  Future<void> _exportFullData(BuildContext context) async {
+    try {
+      final users = await FirebaseFirestore.instance
+          .collection('users')
+          .where('role', isEqualTo: 'user')
+          .get();
+      final donations = await FirebaseFirestore.instance
+          .collection('donations')
+          .get();
+      final events = await FirebaseFirestore.instance
+          .collection('events')
+          .get();
+
+      final report = StringBuffer();
+      report.writeln('===== BLOOD DONATION APP - FULL DATA EXPORT =====');
+      report.writeln('Generated: ${DateTime.now()}');
+      report.writeln('');
+      report.writeln('--- STATISTICS ---');
+      report.writeln('Total Users: ${users.docs.length}');
+      report.writeln('Total Donations: ${donations.docs.length}');
+      report.writeln('Total Events: ${events.docs.length}');
+      report.writeln('');
+      report.writeln('--- USERS DATA ---');
+      for (var doc in users.docs) {
+        final data = doc.data();
+        report.writeln(
+          '${data['name']} (${data['bloodType']}) - ${data['email']}',
+        );
+      }
+      report.writeln('');
+      report.writeln('--- DONATIONS DATA ---');
+      for (var doc in donations.docs) {
+        final data = doc.data();
+        report.writeln(
+          '${data['bloodType']} - ${data['units']} units - ${data['status']}',
+        );
+      }
+      report.writeln('');
+      report.writeln('--- EVENTS DATA ---');
+      for (var doc in events.docs) {
+        final data = doc.data();
+        report.writeln(
+          '${data['title']} - ${data['location']} - ${data['status']}',
+        );
+      }
+
+      if (context.mounted) {
+        Navigator.pop(context);
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Full Data Export'),
+            content: SizedBox(
+              width: double.maxFinite,
+              height: 400,
+              child: SingleChildScrollView(
+                child: SelectableText(report.toString()),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Close'),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    }
+  }
+}

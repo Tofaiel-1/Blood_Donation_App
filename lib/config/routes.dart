@@ -6,6 +6,7 @@ import 'package:blood_bank/screens/admin/audit_log_screen.dart';
 import 'package:blood_bank/screens/admin/super_admin_setup_screen.dart';
 import 'package:blood_bank/screens/admin/demo_data_screen.dart';
 import 'package:blood_bank/screens/admin/add_data_screen.dart';
+import 'package:blood_bank/screens/admin/tabs/user_management_tab.dart';
 import 'package:blood_bank/screens/home/user_blood_request_screen.dart';
 import 'package:flutter/material.dart';
 import '../screens/welcome_screen.dart';
@@ -65,6 +66,14 @@ final Map<String, WidgetBuilder> appRoutes = {
   '/audit-logs': (context) => AuditLogScreen(),
   '/demo-data': (context) => const DemoDataScreen(),
   '/add-data': (context) => const AddDataScreen(),
+  '/admin/user-management': (context) => Scaffold(
+    appBar: AppBar(
+      title: const Text('User Management'),
+      backgroundColor: Colors.red,
+      foregroundColor: Colors.white,
+    ),
+    body: const UserManagementTab(),
+  ),
 
   // Special Features
   '/user-blood-request': (context) => const UserBloodRequestScreen(),

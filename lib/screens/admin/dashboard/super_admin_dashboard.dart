@@ -937,6 +937,13 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
           },
         ),
         ControlPanelCard(
+          title: 'Manage Users',
+          icon: Icons.manage_accounts,
+          onTap: () {
+            Navigator.pushNamed(context, '/admin/user-management');
+          },
+        ),
+        ControlPanelCard(
           title: 'Manage Orgs',
           icon: Icons.business_center,
           onTap: () {
